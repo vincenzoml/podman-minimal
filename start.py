@@ -98,7 +98,69 @@ def resolve_image_from_file(image_file: Path) -> str:
 
 def project_name_from_path(path: Path) -> str:
     cleaned = "".join(c.lower() if (c.isalnum() or c in "._-") else "-" for c in path.name)
-    return cleaned.strip("-") or "project"
+    cleaned = cleaned.strip("-")
+    # OCI/docker image paths cannot use a "."-prefixed repo component (.devcontainer is common).
+    cleaned = cleaned.lstrip(".")
+    cleaned = cleaned.strip("-")
+    return cleaned or "project"
+
+
+def init_devcontainer(launch_dir: Path) -> None:
+    devcontainers_dir = launch_dir / ".devcontainers"
+    devcontainers_dir.mkdir(parents=True, exist_ok=True)
+
+    dockerfile_path = devcontainers_dir / "Dockerfile"
+    devcontainer_json_path = devcontainers_dir / "devcontainer.json"
+
+    if not dockerfile_path.exists():
+        dockerfile_path.write_text(
+            "\n".join(
+                [
+                    "FROM docker.io/nvidia/cuda:12.4.1-base-ubuntu22.04",
+                    "",
+                    "RUN apt-get update && apt-get install -y --no-install-recommends \\",
+                    "    ca-certificates \\",
+                    "    curl \\",
+                    "    git \\",
+                    "    python3 \\",
+                    "    python3-pip \\",
+                    "    bash \\",
+                    "    && rm -rf /var/lib/apt/lists/*",
+                    "",
+                    "WORKDIR /workspace",
+                    "",
+                    "CMD [\"bash\"]",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        print(f"Created: {dockerfile_path}")
+    else:
+        print(f"Exists, not modified: {dockerfile_path}")
+
+    if not devcontainer_json_path.exists():
+        devcontainer_json_path.write_text(
+            "\n".join(
+                [
+                    "{",
+                    "  \"name\": \"podman-minimal\",",
+                    "  \"build\": {",
+                    "    \"dockerfile\": \"Dockerfile\",",
+                    "    \"context\": \".\"",
+                    "  },",
+                    "  \"workspaceFolder\": \"/workspace\",",
+                    "  \"workspaceMount\": \"source=${localWorkspaceFolder},target=/workspace,type=bind\",",
+                    "  \"remoteUser\": \"root\"",
+                    "}",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        print(f"Created: {devcontainer_json_path}")
+    else:
+        print(f"Exists, not modified: {devcontainer_json_path}")
 
 
 def find_default_dockerfile(launch_dir: Path, script_dir: Path) -> Path | None:
@@ -107,6 +169,8 @@ def find_default_dockerfile(launch_dir: Path, script_dir: Path) -> Path | None:
         candidates.extend(
             [
                 base / "Dockerfile",
+                base / ".devcontainers" / "Dockerfile",
+                base / ".devcontainers" / "dockerfile",
                 base / ".devcontainer" / "Dockerfile",
                 base / ".devcontainer" / "dockerfile",
                 base / "devcontainer" / "Dockerfile",
@@ -117,6 +181,19 @@ def find_default_dockerfile(launch_dir: Path, script_dir: Path) -> Path | None:
         if candidate.exists():
             return candidate
     return None
+
+
+def resolve_build_context(dockerfile: Path) -> Path:
+    """Build context directory for ``podman build``.
+    VS Code/Dev Containers convention: Dockerfile lives under ``.devcontainer/`` or
+    ``.devcontainers/``, and ``COPY`` paths are workspace-relative — i.e. ``build.context``: ``..``
+    in ``devcontainer.json``. Using only ``dockerfile.parent`` misses that and breaks COPY.
+    """
+    dockerfile = dockerfile.resolve()
+    parent = dockerfile.parent
+    if parent.name in (".devcontainer", ".devcontainers"):
+        return parent.parent
+    return parent
 
 
 def detect_gpu_args() -> List[str]:
@@ -174,6 +251,7 @@ class RuntimeConfig:
     port: int
     container_port: int
     dockerfile: Path | None
+    force_image_rebuild: bool
     uid: int
     gid: int
     user_name: str
@@ -200,8 +278,15 @@ class PodmanLauncher:
         if self.cfg.image == DEFAULT_IMAGE and self.cfg.dockerfile is None:
             tag = f"local/{project_name_from_path(dockerfile.parent)}:{self.cfg.user_name}"
             self.cfg.image = tag
-        context = dockerfile.parent
+        context = resolve_build_context(dockerfile)
+        if (
+            not self.cfg.force_image_rebuild
+            and run(["podman", "image", "exists", self.cfg.image], check=False).returncode == 0
+        ):
+            print(f"Skipping build (image exists: {self.cfg.image}); use --rebuild-image to rebuild")
+            return
         print(f"Building image from Dockerfile: {dockerfile}")
+        print(f"Build context: {context}")
         run(["podman", "build", "-f", str(dockerfile), "-t", self.cfg.image, str(context)])
 
     def ensure_image(self) -> None:
@@ -460,8 +545,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--daemon-remove", action="store_true", help="Remove user daemon")
     parser.add_argument("--daemon-status", action="store_true", help="Show user daemon status")
     parser.add_argument("--daemon-logs", action="store_true", help="Follow user daemon logs")
+    parser.add_argument(
+        "--init-devcontainer",
+        action="store_true",
+        help="Create minimal .devcontainers/devcontainer.json and Dockerfile in current directory",
+    )
     parser.add_argument("--uid", type=int, help="UID for system Quadlet install via --install")
     parser.add_argument("--dir", type=Path, help="Project directory for system Quadlet install via --install")
+    parser.add_argument(
+        "--rebuild-image",
+        action="store_true",
+        help="Run podman build even when the image tag already exists (default skips build)",
+    )
     parser.add_argument("command", nargs=argparse.REMAINDER, help="Command to run (default: shell)")
     return parser.parse_args()
 
@@ -487,6 +582,7 @@ def main() -> int:
         args.daemon_remove,
         args.daemon_status,
         args.daemon_logs,
+        args.init_devcontainer,
     ]
     if sum(1 for x in action_flags if x) > 1:
         raise RuntimeError("Choose only one action flag at a time")
@@ -507,6 +603,10 @@ def main() -> int:
             )
         return 0
 
+    if args.init_devcontainer:
+        init_devcontainer(launch_dir)
+        return 0
+
     cfg = RuntimeConfig(
         launch_dir=launch_dir,
         script_dir=Path(__file__).resolve().parent,
@@ -515,6 +615,7 @@ def main() -> int:
         port=args.port,
         container_port=container_port,
         dockerfile=args.dockerfile.resolve() if args.dockerfile else None,
+        force_image_rebuild=args.rebuild_image,
         uid=uid,
         gid=gid,
         user_name=user_name,
