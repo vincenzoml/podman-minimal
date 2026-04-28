@@ -26,6 +26,11 @@ Minimal launcher for rootless Podman with automatic GPU detection.
 ./start.py --image-file /path/to/image.tar
 ```
 
+Dockerfile resolution order:
+1) `--dockerfile PATH`
+2) `./Dockerfile` from the directory where you run the command
+3) `Dockerfile` next to `start.py`
+
 ## One-time setup
 
 ```bash
@@ -48,6 +53,8 @@ Minimal launcher for rootless Podman with automatic GPU detection.
 `--daemon-install <cmd ...>` writes a user systemd unit that runs that exact command in a Podman container on login/boot and restarts it on failure.
 
 Port mapping uses `--port HOST` and `--container-port CONTAINER` (default: same value if `--container-port` is omitted).
+
+Daemon image selection uses the same Dockerfile/image rules as normal runs.
 
 ## Options
 

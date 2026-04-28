@@ -150,6 +150,7 @@ def detect_nvidia_tool_mount_args(gpu_args: List[str]) -> List[str]:
 @dataclass
 class RuntimeConfig:
     launch_dir: Path
+    script_dir: Path
     image: str
     container_name: str
     port: int
@@ -172,11 +173,16 @@ class PodmanLauncher:
         self.nvidia_tool_mount_args = detect_nvidia_tool_mount_args(self.gpu_args)
 
     def maybe_build(self) -> None:
-        dockerfile = self.cfg.dockerfile or (self.cfg.launch_dir / "Dockerfile")
+        if self.cfg.dockerfile is not None:
+            dockerfile = self.cfg.dockerfile
+        elif (self.cfg.launch_dir / "Dockerfile").exists():
+            dockerfile = self.cfg.launch_dir / "Dockerfile"
+        else:
+            dockerfile = self.cfg.script_dir / "Dockerfile"
         if not dockerfile.exists():
             return
         if self.cfg.image == DEFAULT_IMAGE and self.cfg.dockerfile is None:
-            tag = f"local/{project_name_from_path(self.cfg.launch_dir)}:{self.cfg.user_name}"
+            tag = f"local/{project_name_from_path(dockerfile.parent)}:{self.cfg.user_name}"
             self.cfg.image = tag
         context = dockerfile.parent
         print(f"Building image from Dockerfile: {dockerfile}")
@@ -487,6 +493,7 @@ def main() -> int:
 
     cfg = RuntimeConfig(
         launch_dir=launch_dir,
+        script_dir=Path(__file__).resolve().parent,
         image=args.image,
         container_name=container_name,
         port=args.port,
