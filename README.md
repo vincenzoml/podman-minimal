@@ -28,8 +28,8 @@ Minimal launcher for rootless Podman with automatic GPU detection.
 
 Dockerfile resolution order:
 1) `--dockerfile PATH`
-2) `./Dockerfile` from the directory where you run the command
-3) `Dockerfile` next to `start.py`
+2) Launch directory: `Dockerfile`, `.devcontainer/Dockerfile`, `.devcontainer/dockerfile`, `devcontainer/Dockerfile`, `devcontainer/dockerfile`
+3) Script directory (same list as above)
 
 ## One-time setup
 

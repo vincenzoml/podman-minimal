@@ -101,6 +101,24 @@ def project_name_from_path(path: Path) -> str:
     return cleaned.strip("-") or "project"
 
 
+def find_default_dockerfile(launch_dir: Path, script_dir: Path) -> Path | None:
+    candidates: List[Path] = []
+    for base in (launch_dir, script_dir):
+        candidates.extend(
+            [
+                base / "Dockerfile",
+                base / ".devcontainer" / "Dockerfile",
+                base / ".devcontainer" / "dockerfile",
+                base / "devcontainer" / "Dockerfile",
+                base / "devcontainer" / "dockerfile",
+            ]
+        )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def detect_gpu_args() -> List[str]:
     # Prefer CDI (modern Podman/NVIDIA integration) when available.
     cdi_specs = [
@@ -175,11 +193,9 @@ class PodmanLauncher:
     def maybe_build(self) -> None:
         if self.cfg.dockerfile is not None:
             dockerfile = self.cfg.dockerfile
-        elif (self.cfg.launch_dir / "Dockerfile").exists():
-            dockerfile = self.cfg.launch_dir / "Dockerfile"
         else:
-            dockerfile = self.cfg.script_dir / "Dockerfile"
-        if not dockerfile.exists():
+            dockerfile = find_default_dockerfile(self.cfg.launch_dir, self.cfg.script_dir)
+        if dockerfile is None:
             return
         if self.cfg.image == DEFAULT_IMAGE and self.cfg.dockerfile is None:
             tag = f"local/{project_name_from_path(dockerfile.parent)}:{self.cfg.user_name}"
