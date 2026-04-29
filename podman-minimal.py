@@ -27,6 +27,7 @@ import re
 import tempfile
 import platform
 import time
+import getpass
 from urllib.request import urlopen
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,6 +50,7 @@ SYSTEM_OCI_DIR = "/etc/containers/systemd"
 RAW_START_PY_URL = "https://raw.githubusercontent.com/vincenzoml/podman-minimal/main/podman-minimal.py"
 VERBOSE = False
 DEFAULT_NOHUP_LOG = "podman-minimal.nohup.log"
+SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
 
 def sudo_allowed() -> bool:
@@ -97,6 +99,51 @@ def run(cmd: List[str], check: bool = True) -> subprocess.CompletedProcess:
 def run_capture(cmd: List[str], check: bool = True) -> str:
     proc = subprocess.run(cmd, check=check, text=True, capture_output=True)
     return proc.stdout.strip()
+
+
+def atomic_write(path: Path, data: bytes, mode: int | None = None) -> None:
+    path = path.expanduser()
+    parent = path.parent
+    if not parent.exists():
+        parent.mkdir(parents=True, exist_ok=True)
+    if not parent.is_dir():
+        raise RuntimeError(f"Parent path is not a directory: {parent}")
+    if path.exists() and path.is_dir():
+        raise RuntimeError(f"Refusing to replace directory: {path}")
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(parent))
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if mode is not None:
+            os.chmod(tmp_path, mode)
+        os.replace(tmp_path, path)
+        if hasattr(os, "O_DIRECTORY"):
+            try:
+                dir_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+            except OSError:
+                dir_fd = None
+            if dir_fd is not None:
+                try:
+                    os.fsync(dir_fd)
+                finally:
+                    os.close(dir_fd)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
+def atomic_write_text(path: Path, text: str, mode: int | None = None) -> None:
+    atomic_write(path, text.encode("utf-8"), mode=mode)
+
+
+def validate_name(value: str, label: str = "name") -> str:
+    if not SAFE_NAME_RE.fullmatch(value):
+        raise RuntimeError(
+            f"Invalid {label}: {value!r}. Use letters, digits, '.', '_' or '-', starting with a letter or digit."
+        )
+    return value
 
 
 def ensure_command_exists(name: str) -> None:
@@ -206,9 +253,10 @@ def install_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
                 f"Install directory does not exist and cannot be created without elevated privileges: {target_parent}. "
                 "Create it yourself first, or choose an existing writable directory such as ~/.local/bin."
             ) from err
+    if not target_parent.is_dir():
+        raise RuntimeError(f"Install target is not a directory: {target_parent}")
     try:
-        target.write_bytes(script_bytes)
-        os.chmod(target, 0o755)
+        atomic_write(target, script_bytes, mode=0o755)
     except PermissionError:
         require_sudo_capability(
             f"Cannot write `{target}` without permission."
@@ -226,9 +274,11 @@ def install_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
 
 def uninstall_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
     target = Path(target_dir).expanduser() / COMMAND_NAME
-    if not target.exists():
+    if not target.exists() and not target.is_symlink():
         vprint(f"Not installed at: {target}")
         return
+    if target.exists() and target.is_dir():
+        raise RuntimeError(f"Refusing to remove directory: {target}")
     try:
         target.unlink()
     except PermissionError:
@@ -258,11 +308,7 @@ def update_self() -> None:
         )
     script_bytes = urlopen(RAW_START_PY_URL).read()
     try:
-        with tempfile.NamedTemporaryFile(delete=False, dir=str(running_path.parent)) as tmp:
-            tmp.write(script_bytes)
-            tmp_path = Path(tmp.name)
-        os.chmod(tmp_path, 0o755)
-        os.replace(tmp_path, running_path)
+        atomic_write(running_path, script_bytes, mode=0o755)
     except PermissionError:
         require_sudo_capability(f"Cannot update `{running_path}` without permission.")
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
@@ -330,6 +376,13 @@ def project_name_from_path(path: Path) -> str:
     return cleaned or "project"
 
 
+def safe_name_component(value: str, default: str = "user") -> str:
+    cleaned = "".join(c if (c.isalnum() or c in "._-") else "-" for c in value)
+    cleaned = cleaned.strip("-")
+    cleaned = cleaned.lstrip(".")
+    return cleaned or default
+
+
 def init_devcontainer(launch_dir: Path) -> None:
     devcontainers_dir = launch_dir / ".devcontainers"
     devcontainers_dir.mkdir(parents=True, exist_ok=True)
@@ -338,7 +391,8 @@ def init_devcontainer(launch_dir: Path) -> None:
     devcontainer_json_path = devcontainers_dir / "devcontainer.json"
 
     if not dockerfile_path.exists():
-        dockerfile_path.write_text(
+        atomic_write_text(
+            dockerfile_path,
             "\n".join(
                 [
                     "FROM docker.io/nvidia/cuda:12.4.1-base-ubuntu22.04",
@@ -357,15 +411,15 @@ def init_devcontainer(launch_dir: Path) -> None:
                     "CMD [\"bash\"]",
                     "",
                 ]
-            ),
-            encoding="utf-8",
+            )
         )
         vprint(f"Created: {dockerfile_path}")
     else:
         vprint(f"Exists, not modified: {dockerfile_path}")
 
     if not devcontainer_json_path.exists():
-        devcontainer_json_path.write_text(
+        atomic_write_text(
+            devcontainer_json_path,
             "\n".join(
                 [
                     "{",
@@ -380,8 +434,7 @@ def init_devcontainer(launch_dir: Path) -> None:
                     "}",
                     "",
                 ]
-            ),
-            encoding="utf-8",
+            )
         )
         vprint(f"Created: {devcontainer_json_path}")
     else:
@@ -676,7 +729,8 @@ class PodmanLauncher:
         unit_dir = Path.home() / ".config/systemd/user"
         unit_dir.mkdir(parents=True, exist_ok=True)
         unit_file = unit_dir / unit_name
-        unit_file.write_text(
+        atomic_write_text(
+            unit_file,
             "\n".join(
                 [
                     "[Unit]",
@@ -696,8 +750,7 @@ class PodmanLauncher:
                     "WantedBy=default.target",
                     "",
                 ]
-            ),
-            encoding="utf-8",
+            )
         )
         run(["systemctl", "--user", "daemon-reload"])
         run(["systemctl", "--user", "enable", "--now", unit_name])
@@ -710,7 +763,9 @@ class PodmanLauncher:
         unit_name = f"{self.cfg.container_name}.service"
         run(["systemctl", "--user", "disable", "--now", unit_name], check=False)
         unit_file = Path.home() / ".config/systemd/user" / unit_name
-        if unit_file.exists():
+        if unit_file.exists() or unit_file.is_symlink():
+            if unit_file.exists() and unit_file.is_dir():
+                raise RuntimeError(f"Refusing to remove directory: {unit_file}")
             unit_file.unlink()
         run(["systemctl", "--user", "daemon-reload"])
         run(["podman", "rm", "-f", self.cfg.container_name], check=False)
@@ -741,6 +796,7 @@ def install_root_quadlet(
     gid = pw.pw_gid
     user_name = pw.pw_name
     group_name = grp.getgrgid(gid).gr_name
+    validate_name(container_name, "container name")
 
     real_project = project_dir.resolve()
     if not real_project.is_dir():
@@ -756,7 +812,8 @@ def install_root_quadlet(
     quadlet_dir = Path("/etc/containers/systemd")
     quadlet_dir.mkdir(parents=True, exist_ok=True)
     quadlet_file = quadlet_dir / f"{container_name}.container"
-    quadlet_file.write_text(
+    atomic_write_text(
+        quadlet_file,
         "\n".join(
             [
                 "[Unit]",
@@ -784,8 +841,7 @@ def install_root_quadlet(
                 "WantedBy=multi-user.target",
                 "",
             ]
-        ),
-        encoding="utf-8",
+        )
     )
 
     run(["systemctl", "daemon-reload"])
@@ -884,13 +940,17 @@ def main() -> int:
                     "--install with --uid/--dir performs system Quadlet setup and must be run as root on Linux. "
                     "No files were installed."
                 )
+            validate_name(
+                args.name or f"ubuntu-{safe_name_component(os.environ.get('USER') or getpass.getuser())}",
+                "container name",
+            )
         install_self(args.install)
         if args.uid is not None or args.dir is not None:
             install_root_quadlet(
                 project_dir=args.dir,
                 uid=args.uid,
                 image=args.image,
-                container_name=args.name or f"ubuntu-{os.environ.get('USER') or run_capture(['id', '-un'])}",
+                container_name=args.name or f"ubuntu-{safe_name_component(os.environ.get('USER') or getpass.getuser())}",
                 host_port=args.port,
                 container_port=args.container_port if args.container_port is not None else args.port,
             )
@@ -901,11 +961,12 @@ def main() -> int:
         vprint(f"{COMMAND_NAME} {VERSION}")
         vprint(f"Update hint: run `{COMMAND_NAME} --update`")
     launch_dir = Path.cwd()
-    user_name = os.environ.get("USER") or os.environ.get("USERNAME") or run_capture(["id", "-un"])
+    user_name = os.environ.get("USER") or os.environ.get("USERNAME") or getpass.getuser()
     uid = os.getuid() if hasattr(os, "getuid") else 1000
     gid = os.getgid() if hasattr(os, "getgid") else 1000
     user_home = Path.home()
-    container_name = args.name or f"ubuntu-{user_name}"
+    container_name = args.name or f"ubuntu-{safe_name_component(user_name)}"
+    validate_name(container_name, "container name")
     container_port = args.container_port if args.container_port is not None else args.port
     if VERBOSE and not args.install and not args.uninstall and not args.update:
         check_setup_prompt(Path(sys.argv[0]).name)
