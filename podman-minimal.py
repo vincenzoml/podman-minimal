@@ -23,6 +23,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import sysconfig
 import re
 import tempfile
 import platform
@@ -44,7 +45,19 @@ except ImportError:
 DEFAULT_IMAGE = "docker.io/library/ubuntu:26.04"
 DEFAULT_PORT = 18080
 VERSION = "1.0"
-DEFAULT_INSTALL_DIR = "/usr/local/bin"
+def compute_default_install_dir() -> str:
+    if platform.system().lower() == "windows":
+        scripts_dir = sysconfig.get_path("scripts")
+        if scripts_dir:
+            return scripts_dir
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            return str(Path(local_app_data) / "Programs" / "Python" / "Scripts")
+        return str(Path.home() / "AppData" / "Local" / "Programs" / "Python" / "Scripts")
+    return "/usr/local/bin"
+
+
+DEFAULT_INSTALL_DIR = compute_default_install_dir()
 COMMAND_NAME = "podman-minimal"
 SYSTEM_OCI_DIR = "/etc/containers/systemd"
 RAW_START_PY_URL = "https://raw.githubusercontent.com/vincenzoml/podman-minimal/refs/heads/main/podman-minimal.py"
@@ -937,14 +950,14 @@ def parse_args() -> argparse.Namespace:
         nargs="?",
         const=DEFAULT_INSTALL_DIR,
         metavar="DIR",
-        help="Install command into DIR (default: /usr/local/bin)",
+        help=f"Install command into DIR (default: {DEFAULT_INSTALL_DIR})",
     )
     parser.add_argument(
         "--uninstall",
         nargs="?",
         const=DEFAULT_INSTALL_DIR,
         metavar="DIR",
-        help="Remove command from DIR (default: /usr/local/bin)",
+        help=f"Remove command from DIR (default: {DEFAULT_INSTALL_DIR})",
     )
     parser.add_argument(
         "--unistall",
@@ -954,10 +967,10 @@ def parse_args() -> argparse.Namespace:
         metavar="DIR",
         help=argparse.SUPPRESS,
     )
-    parser.add_argument("--daemon-install", action="store_true", help="Install/update user daemon")
-    parser.add_argument("--daemon-remove", action="store_true", help="Remove user daemon")
-    parser.add_argument("--daemon-status", action="store_true", help="Show user daemon status")
-    parser.add_argument("--daemon-logs", action="store_true", help="Follow user daemon logs")
+    parser.add_argument("--daemon-install", action="store_true", help="Install/update user daemon (Linux only)")
+    parser.add_argument("--daemon-remove", action="store_true", help="Remove user daemon (Linux only)")
+    parser.add_argument("--daemon-status", action="store_true", help="Show user daemon status (Linux only)")
+    parser.add_argument("--daemon-logs", action="store_true", help="Follow user daemon logs (Linux only)")
     parser.add_argument(
         "--init-devcontainer",
         action="store_true",
@@ -1025,6 +1038,25 @@ def main() -> int:
             )
         return 0
 
+    action_flags = [
+        args.daemon_install,
+        args.daemon_remove,
+        args.daemon_status,
+        args.daemon_logs,
+        args.init_devcontainer,
+        bool(args.install),
+        bool(args.uninstall),
+        args.update,
+        bool(args.nohup),
+    ]
+    if sum(1 for x in action_flags if x) > 1:
+        raise RuntimeError("Choose only one action flag at a time")
+
+    if host_os() != "linux" and (
+        args.daemon_install or args.daemon_remove or args.daemon_status or args.daemon_logs
+    ):
+        raise RuntimeError("--daemon-* features are currently Linux-only.")
+
     install_podman_if_missing()
     ensure_podman_connection()
     if VERBOSE:
@@ -1044,28 +1076,9 @@ def main() -> int:
     if args.image_file:
         args.image = resolve_image_from_file(args.image_file.resolve())
 
-    action_flags = [
-        args.daemon_install,
-        args.daemon_remove,
-        args.daemon_status,
-        args.daemon_logs,
-        args.init_devcontainer,
-        bool(args.install),
-        bool(args.uninstall),
-        args.update,
-        bool(args.nohup),
-    ]
-    if sum(1 for x in action_flags if x) > 1:
-        raise RuntimeError("Choose only one action flag at a time")
-
     if args.init_devcontainer:
         init_devcontainer(launch_dir)
         return 0
-
-    if host_os() != "linux" and (
-        args.daemon_install or args.daemon_remove or args.daemon_status or args.daemon_logs
-    ):
-        raise RuntimeError("--daemon-* features are currently Linux-only.")
 
     cfg = RuntimeConfig(
         launch_dir=launch_dir,

@@ -363,7 +363,7 @@
       </div>
       <div class="use">
         <h3>Persistent work</h3>
-        <p>Use <code>--nohup</code> for terminal-proof jobs or Linux user services for daemons.</p>
+        <p>Use <code>--nohup</code> for terminal-proof jobs or Linux-only user services for daemons.</p>
       </div>
     </section>
 
@@ -397,11 +397,15 @@
         const ua = navigator.userAgent.toLowerCase();
         const osDetected = ua.includes("windows") ? "windows" : (ua.includes("mac os") || ua.includes("macintosh")) ? "macos" : "linux";
         const os = osChoice === "auto" ? osDetected : osChoice;
-        const py = os === "windows" ? "python" : "python3";
+        const py = os === "windows" ? "py" : "python3";
         cmd.textContent = `${py} -c "import urllib.request as u; exec(u.urlopen('${rawUrl}').read().decode())" --install`;
-        note.innerHTML = osChoice === "auto"
-          ? `Auto mode detected <code>${osDetected}</code>. Docs: <a href="https://github.com/vincenzoml/podman-minimal/blob/main/README.md">README</a>.`
-          : `Selected <code>${os}</code>. Docs: <a href="https://github.com/vincenzoml/podman-minimal/blob/main/README.md">README</a>.`;
+        if (os === "windows") {
+          note.innerHTML = `Windows: if <code>py</code> is missing, install Python first (Microsoft Store is fine), then run again. Docs: <a href="https://github.com/vincenzoml/podman-minimal/blob/main/README.md">README</a>.`;
+        } else {
+          note.innerHTML = osChoice === "auto"
+            ? `Auto mode detected <code>${osDetected}</code>. Docs: <a href="https://github.com/vincenzoml/podman-minimal/blob/main/README.md">README</a>.`
+            : `Selected <code>${os}</code>. Docs: <a href="https://github.com/vincenzoml/podman-minimal/blob/main/README.md">README</a>.`;
+        }
         osButtons.forEach((b) => b.setAttribute("aria-pressed", b.dataset.os === osChoice ? "true" : "false"));
       };
       render("auto");

@@ -18,8 +18,12 @@ python3 -c "import urllib.request as u; exec(u.urlopen('https://raw.githubuserco
 Windows PowerShell:
 
 ```powershell
-python -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/vincenzoml/podman-minimal/refs/heads/main/podman-minimal.py').read().decode())" --install
+py -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/vincenzoml/podman-minimal/refs/heads/main/podman-minimal.py').read().decode())" --install
 ```
+
+If `py` is not available yet, install Python first (Microsoft Store is fine), then run the command again.
+
+On Windows, `--install` defaults to your Python scripts directory (for example `%LocalAppData%\Programs\Python\Python314\Scripts`), not `/usr/local/bin`.
 
 User-local install:
 
@@ -137,6 +141,8 @@ Resolution order:
 For `.devcontainer/` and `.devcontainers/`, the build context is the parent directory.
 
 ## Linux daemon
+
+`--daemon-*` commands are Linux-only and will fail fast on macOS/Windows.
 
 ```bash
 podman-minimal --daemon-install python3 -m http.server 8080
