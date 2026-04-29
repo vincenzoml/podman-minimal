@@ -12,6 +12,7 @@ import sys
 import re
 import tempfile
 import platform
+import time
 from urllib.request import urlopen
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +33,24 @@ DEFAULT_INSTALL_DIR = "/usr/local/bin"
 COMMAND_NAME = "podman-minimal"
 SYSTEM_OCI_DIR = "/etc/containers/systemd"
 RAW_START_PY_URL = "https://raw.githubusercontent.com/vincenzoml/podman-minimal/main/podman-minimal.py"
+VERBOSE = False
+DEFAULT_NOHUP_LOG = "podman-minimal.nohup.log"
+
+
+def sudo_allowed() -> bool:
+    """If PODMAN_MINIMAL_NO_SUDO is set (1/true/yes), never invoke sudo — safer on shared machines."""
+    val = os.environ.get("PODMAN_MINIMAL_NO_SUDO", "").strip().lower()
+    return val not in ("1", "true", "yes", "on")
+
+
+def require_sudo_capability(explanation: str) -> None:
+    if not sudo_allowed():
+        raise RuntimeError(
+            f"{explanation} "
+            "Set PODMAN_MINIMAL_NO_SUDO=0 (or unset it) to allow sudo, "
+            "or use a user-writable install path (e.g. ~/.local/bin) and install Podman yourself."
+        )
+    ensure_command_exists("sudo")
 
 
 def run(cmd: List[str], check: bool = True) -> subprocess.CompletedProcess:
@@ -48,6 +67,11 @@ def ensure_command_exists(name: str) -> None:
         raise RuntimeError(f"Required command not found: {name}")
 
 
+def vprint(message: str) -> None:
+    if VERBOSE:
+        print(message)
+
+
 def host_os() -> str:
     name = platform.system().lower()
     if name == "darwin":
@@ -60,7 +84,7 @@ def host_os() -> str:
 def install_homebrew_if_missing() -> None:
     if shutil.which("brew"):
         return
-    print("Homebrew not found; installing Homebrew first...")
+    vprint("Homebrew not found; installing Homebrew first...")
     run(
         [
             "/bin/bash",
@@ -74,9 +98,9 @@ def install_podman_if_missing() -> None:
     if shutil.which("podman") is not None:
         return
     os_name = host_os()
-    print("Podman not found; attempting automatic install...")
+    vprint("Podman not found; attempting automatic install...")
     if os_name == "linux":
-        ensure_command_exists("sudo")
+        require_sudo_capability("Automatic Podman install on Linux uses sudo with your package manager.")
         installers: List[List[str]] = []
         if shutil.which("apt-get"):
             installers = [
@@ -116,7 +140,7 @@ def install_podman_if_missing() -> None:
     else:
         raise RuntimeError(f"Unsupported operating system: {os_name}")
     ensure_command_exists("podman")
-    print("Podman installation completed.")
+    vprint("Podman installation completed.")
 
 
 def install_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
@@ -132,28 +156,30 @@ def install_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
         target.write_bytes(script_bytes)
         os.chmod(target, 0o755)
     except PermissionError:
-        ensure_command_exists("sudo")
+        require_sudo_capability(
+            f"Cannot write `{target}` without permission."
+        )
         tmp_src = Path("/tmp/podman-minimal.py")
         tmp_src.write_bytes(script_bytes)
         run(["sudo", "mkdir", "-p", str(target.parent)])
         run(["sudo", "cp", str(tmp_src), str(target)])
         run(["sudo", "chmod", "755", str(target)])
         run(["rm", "-f", str(tmp_src)])
-    print(f"Installed launcher: {target}")
-    print(f"Run it from anywhere with: {target.name}")
+    vprint(f"Installed launcher: {target}")
+    vprint(f"Run it from anywhere with: {target.name}")
 
 
 def uninstall_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
     target = Path(target_dir).expanduser() / COMMAND_NAME
     if not target.exists():
-        print(f"Not installed at: {target}")
+        vprint(f"Not installed at: {target}")
         return
     try:
         target.unlink()
     except PermissionError:
-        ensure_command_exists("sudo")
+        require_sudo_capability(f"Cannot remove `{target}` without permission.")
         run(["sudo", "rm", "-f", str(target)])
-    print(f"Removed launcher: {target}")
+    vprint(f"Removed launcher: {target}")
 
 
 def resolve_running_script_path() -> Path | None:
@@ -178,14 +204,14 @@ def update_self() -> None:
         os.chmod(tmp_path, 0o755)
         os.replace(tmp_path, running_path)
     except PermissionError:
-        ensure_command_exists("sudo")
+        require_sudo_capability(f"Cannot update `{running_path}` without permission.")
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
             tmp.write(script_bytes)
             tmp_path = Path(tmp.name)
         run(["sudo", "install", "-m", "755", str(tmp_path), str(running_path)])
         run(["rm", "-f", str(tmp_path)])
-    print(f"Updated launcher in place: {running_path}")
-    print("Restart any running podman-minimal sessions to use the new version.")
+    vprint(f"Updated launcher in place: {running_path}")
+    vprint("Restart any running podman-minimal sessions to use the new version.")
 
 
 def check_setup_prompt(script_invocation: str, auto_install: bool) -> None:
@@ -199,12 +225,12 @@ def check_setup_prompt(script_invocation: str, auto_install: bool) -> None:
     if auto_install and sys.stdin.isatty():
         install_self()
         return
-    print("Setup check: some standard host paths are missing:")
+    vprint("Setup check: some standard host paths are missing:")
     for item in missing:
-        print(f"  - {item}")
-    print("Run once with automatic setup:")
-    print(f"  {script_invocation} --install")
-    print()
+        vprint(f"  - {item}")
+    vprint("Run once with automatic setup:")
+    vprint(f"  {script_invocation} --install")
+    vprint("")
 
 
 def ensure_user_linger(user_name: str) -> None:
@@ -217,8 +243,8 @@ def ensure_user_linger(user_name: str) -> None:
     if os.geteuid() == 0:
         run(["loginctl", "enable-linger", user_name])
         return
-    ensure_command_exists("sudo")
-    print(f"Enabling linger for user '{user_name}' (sudo may prompt)...")
+    require_sudo_capability("Enabling linger for your user may require sudo.")
+    vprint(f"Enabling linger for user '{user_name}' (sudo may prompt)...")
     proc = run(["sudo", "loginctl", "enable-linger", user_name], check=False)
     if proc.returncode != 0:
         raise RuntimeError(
@@ -275,9 +301,9 @@ def init_devcontainer(launch_dir: Path) -> None:
             ),
             encoding="utf-8",
         )
-        print(f"Created: {dockerfile_path}")
+        vprint(f"Created: {dockerfile_path}")
     else:
-        print(f"Exists, not modified: {dockerfile_path}")
+        vprint(f"Exists, not modified: {dockerfile_path}")
 
     if not devcontainer_json_path.exists():
         devcontainer_json_path.write_text(
@@ -298,9 +324,9 @@ def init_devcontainer(launch_dir: Path) -> None:
             ),
             encoding="utf-8",
         )
-        print(f"Created: {devcontainer_json_path}")
+        vprint(f"Created: {devcontainer_json_path}")
     else:
-        print(f"Exists, not modified: {devcontainer_json_path}")
+        vprint(f"Exists, not modified: {devcontainer_json_path}")
 
 
 def find_default_dockerfile(launch_dir: Path, script_dir: Path) -> Path | None:
@@ -389,6 +415,7 @@ class RuntimeConfig:
     gid: int
     user_name: str
     user_home: Path
+    verbose: bool
 
     @property
     def project_mount(self) -> str:
@@ -416,18 +443,20 @@ class PodmanLauncher:
             not self.cfg.force_image_rebuild
             and run(["podman", "image", "exists", self.cfg.image], check=False).returncode == 0
         ):
-            print(f"Skipping build (image exists: {self.cfg.image}); use --rebuild-image to rebuild")
+            vprint(f"Skipping build (image exists: {self.cfg.image}); use --rebuild-image to rebuild")
             return
-        print(f"Building image from Dockerfile: {dockerfile}")
-        print(f"Build context: {context}")
+        if self.cfg.verbose:
+            vprint(f"Using Dockerfile: {dockerfile}")
+            vprint(f"Build context: {context}")
+        vprint(f"Building image from Dockerfile: {dockerfile}")
         run(["podman", "build", "-f", str(dockerfile), "-t", self.cfg.image, str(context)])
 
     def ensure_image(self) -> None:
         image_exists = run(["podman", "image", "exists", self.cfg.image], check=False).returncode == 0
         if image_exists:
-            print(f"Using local image: {self.cfg.image}")
+            vprint(f"Using local image: {self.cfg.image}")
             return
-        print(f"Pulling image: {self.cfg.image}")
+        vprint(f"Pulling image: {self.cfg.image}")
         run(["podman", "pull", self.cfg.image])
 
     def _common_identity_args(self) -> List[str]:
@@ -460,13 +489,13 @@ class PodmanLauncher:
             self.cfg.image,
             "bash",
         ]
-        print(f"Starting interactive shell in {self.cfg.image}")
+        vprint(f"Starting interactive shell in {self.cfg.image}")
         os.execvp(args[0], args)
 
-    def run_command_mode(self, command: List[str]) -> int:
+    def build_run_command_args(self, command: List[str]) -> List[str]:
         if not command:
             raise RuntimeError("No command provided for command mode")
-        args = [
+        return [
             "podman",
             "run",
             "--rm",
@@ -484,7 +513,49 @@ class PodmanLauncher:
             self.cfg.image,
             *command,
         ]
+
+    def run_command_mode(self, command: List[str]) -> int:
+        args = self.build_run_command_args(command)
         return run(args, check=False).returncode
+
+    def nohup_command_mode(self, command: List[str], log_file: Path) -> int:
+        args = self.build_run_command_args(command)
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        log_handle = log_file.open("a", encoding="utf-8")
+        if host_os() == "windows":
+            creation_flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+            proc = subprocess.Popen(
+                args,
+                stdin=subprocess.DEVNULL,
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+                creationflags=creation_flags,
+            )
+        else:
+            proc = subprocess.Popen(
+                args,
+                stdin=subprocess.DEVNULL,
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+                preexec_fn=os.setsid,
+            )
+        log_handle.flush()
+        vprint(f"Nohup started (pid: {proc.pid}) log: {log_file}")
+
+        with log_file.open("r", encoding="utf-8", errors="replace") as reader:
+            reader.seek(0, os.SEEK_END)
+            while proc.poll() is None:
+                line = reader.readline()
+                if line:
+                    print(line, end="")
+                else:
+                    time.sleep(0.1)
+            while True:
+                line = reader.readline()
+                if not line:
+                    break
+                print(line, end="")
+        return proc.returncode or 0
 
     def service_mode(self, command: List[str]) -> None:
         service_cmd = command or ["sleep", "infinity"]
@@ -512,7 +583,7 @@ class PodmanLauncher:
             *service_cmd,
         ]
         run(args)
-        print(
+        vprint(
             f"Service started: {self.cfg.container_name} "
             f"(host {self.cfg.port} -> container {self.cfg.container_port})"
         )
@@ -571,7 +642,7 @@ class PodmanLauncher:
         )
         run(["systemctl", "--user", "daemon-reload"])
         run(["systemctl", "--user", "enable", "--now", unit_name])
-        print(
+        vprint(
             f"Daemon installed and started: {unit_name} "
             f"(host {self.cfg.port} -> container {self.cfg.container_port})"
         )
@@ -584,7 +655,7 @@ class PodmanLauncher:
             unit_file.unlink()
         run(["systemctl", "--user", "daemon-reload"])
         run(["podman", "rm", "-f", self.cfg.container_name], check=False)
-        print(f"Daemon removed: {unit_name}")
+        vprint(f"Daemon removed: {unit_name}")
 
     def daemon_status(self) -> None:
         os.execvp("systemctl", ["systemctl", "--user", "status", f"{self.cfg.container_name}.service"])
@@ -618,7 +689,7 @@ def install_root_quadlet(
 
     dockerfile = real_project / "Dockerfile"
     if dockerfile.exists():
-        print(f"Building image from Dockerfile: {dockerfile}")
+        vprint(f"Building image from Dockerfile: {dockerfile}")
         run(["podman", "build", "-f", str(dockerfile), "-t", image, str(real_project)])
     else:
         run(["podman", "pull", image])
@@ -660,15 +731,23 @@ def install_root_quadlet(
 
     run(["systemctl", "daemon-reload"])
     run(["systemctl", "enable", "--now", f"{container_name}.service"])
-    print(f"Installed system Quadlet: {quadlet_file}")
-    print(f"Port mapping: host {host_port} -> container {container_port}")
-    print(f"Running as UID {uid} ({user_name})")
+    vprint(f"Installed system Quadlet: {quadlet_file}")
+    vprint(f"Port mapping: host {host_port} -> container {container_port}")
+    vprint(f"Running as UID {uid} ({user_name})")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Minimal Podman launcher")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     parser.add_argument("--version", action="store_true", help="Print version and exit")
     parser.add_argument("--update", action="store_true", help="Update installed command from main branch")
+    parser.add_argument(
+        "--nohup",
+        nargs="?",
+        const=DEFAULT_NOHUP_LOG,
+        metavar="LOGFILE",
+        help="Run command detached, survive terminal close, and tee output to LOGFILE",
+    )
     parser.add_argument("--dockerfile", type=Path, help="Path to Dockerfile")
     parser.add_argument("--image", default=DEFAULT_IMAGE, help="Image name")
     parser.add_argument("--image-file", type=Path, help="OCI/docker archive to load via podman load")
@@ -722,7 +801,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    global VERBOSE
     args = parse_args()
+    VERBOSE = args.verbose
     if args.version:
         print(f"{COMMAND_NAME} {VERSION}")
         return 0
@@ -751,6 +832,9 @@ def main() -> int:
         return 0
 
     install_podman_if_missing()
+    if VERBOSE:
+        vprint(f"{COMMAND_NAME} {VERSION}")
+        vprint(f"Update hint: run `{COMMAND_NAME} --update`")
     launch_dir = Path.cwd()
     user_name = os.environ.get("USER") or os.environ.get("USERNAME") or run_capture(["id", "-un"])
     uid = os.getuid() if hasattr(os, "getuid") else 1000
@@ -758,7 +842,7 @@ def main() -> int:
     user_home = Path.home()
     container_name = args.name or f"ubuntu-{user_name}"
     container_port = args.container_port if args.container_port is not None else args.port
-    if not args.install and not args.uninstall and not args.update:
+    if VERBOSE and not args.install and not args.uninstall and not args.update:
         check_setup_prompt(Path(sys.argv[0]).name, auto_install=True)
 
     if args.image_file:
@@ -773,6 +857,7 @@ def main() -> int:
         bool(args.install),
         bool(args.uninstall),
         args.update,
+        bool(args.nohup),
     ]
     if sum(1 for x in action_flags if x) > 1:
         raise RuntimeError("Choose only one action flag at a time")
@@ -799,14 +884,19 @@ def main() -> int:
         gid=gid,
         user_name=user_name,
         user_home=user_home,
+        verbose=VERBOSE,
     )
     launcher = PodmanLauncher(cfg)
     launcher.maybe_build()
     launcher.ensure_image()
+    vprint(f"Runtime image: {cfg.image}")
 
     command = args.command
     if command and command[0] == "--":
         command = command[1:]
+
+    if args.nohup and not command:
+        raise RuntimeError("--nohup requires a command, e.g. podman-minimal --nohup my.log -- python app.py")
 
     if args.daemon_install:
         launcher.daemon_install(command)
@@ -816,6 +906,8 @@ def main() -> int:
         launcher.daemon_status()
     elif args.daemon_logs:
         launcher.daemon_logs()
+    elif args.nohup:
+        return launcher.nohup_command_mode(command, Path(args.nohup).expanduser())
     elif command:
         return launcher.run_command_mode(command)
     else:
