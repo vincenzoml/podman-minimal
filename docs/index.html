@@ -9,17 +9,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="author" content="Vincenzo Ciancia &lt;vincenzoml@gmail.com&gt;" />
   <title>podman-minimal</title>
-  <meta name="description" content="One command to run Podman workloads: pick an image, GPU-ready when your host supports it." />
+  <meta name="description" content="A tiny command for clean, reproducible Podman environments." />
   <style>
     :root {
-      --bg: #2c2c2e;
-      --text: #f5f5f7;
-      --muted: #98989d;
-      --line: #48484a;
-      --terminal-bg: #1c1c1e;
-      --prompt: #6e6e73;
-      --command: #f5f5f7;
-      --output-dim: #d1d1d6;
+      --paper: #fafafa;
+      --ink: #171717;
+      --charcoal: #252525;
+      --muted: #6f6f6f;
+      --soft: #e7e5e1;
+      --panel: #ffffff;
+      --code: #202020;
+      --code-muted: #a8a29e;
+      --accent: #111111;
     }
     * { box-sizing: border-box; }
     html { -webkit-font-smoothing: antialiased; }
@@ -27,13 +28,15 @@
       margin: 0;
       min-height: 100vh;
       font: 17px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      color: var(--text);
-      background: var(--bg);
+      color: var(--ink);
+      background:
+        radial-gradient(900px 420px at 50% -120px, #ffffff 0%, #f3f1ed 55%, transparent 100%),
+        var(--paper);
     }
     .wrap {
-      max-width: 640px;
+      max-width: 980px;
       margin: 0 auto;
-      padding: 48px 24px 80px;
+      padding: 40px 24px 84px;
     }
     header {
       display: flex;
@@ -41,13 +44,11 @@
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      margin-bottom: 40px;
-      padding-bottom: 24px;
-      border-bottom: 1px solid var(--line);
+      margin-bottom: 86px;
     }
     h1 {
-      font-size: 1.5rem;
-      font-weight: 600;
+      font-size: 1rem;
+      font-weight: 650;
       letter-spacing: -0.02em;
       margin: 0;
     }
@@ -57,104 +58,195 @@
       gap: 12px;
     }
     .nav a {
-      color: var(--text);
+      color: var(--ink);
       text-decoration: none;
       font-size: 0.875rem;
     }
     .nav a:hover { text-decoration: underline; text-underline-offset: 3px; }
     .btn-star {
-      border: 1px solid var(--line);
-      padding: 8px 14px;
-      border-radius: 6px;
-      background: transparent;
+      border: 1px solid var(--ink);
+      padding: 9px 15px;
+      border-radius: 999px;
+      background: var(--ink);
+      color: #fff !important;
       font-size: 0.875rem;
-      font-weight: 500;
+      font-weight: 650;
     }
-    .btn-star:hover { background: rgba(255,255,255,0.06); }
+    .btn-star:hover { background: #000; text-decoration: none !important; }
     .github-ic {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       width: 40px;
       height: 40px;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      color: var(--text);
+      border: 1px solid var(--soft);
+      border-radius: 999px;
+      color: var(--ink);
+      background: #fff;
     }
-    .github-ic:hover { background: rgba(255,255,255,0.06); }
+    .github-ic:hover { background: #f2f0ec; text-decoration: none !important; }
     .github-ic svg { width: 22px; height: 22px; display: block; }
     .issue { font-size: 0.8125rem; color: var(--muted); }
-    .issue:hover { color: var(--text); }
+    .issue:hover { color: var(--ink); }
 
+    .hero {
+      max-width: 760px;
+      margin: 0 auto 48px;
+      text-align: center;
+    }
+    .eyebrow {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 650;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .hero h2 {
+      margin: 0;
+      color: var(--charcoal);
+      font-size: clamp(3.2rem, 9vw, 7.2rem);
+      line-height: 0.9;
+      letter-spacing: -0.075em;
+      font-weight: 760;
+    }
     .lede {
-      margin: 0 0 28px;
-      font-size: 1.0625rem;
+      max-width: 640px;
+      margin: 28px auto 0;
+      color: var(--muted);
+      font-size: clamp(1.08rem, 2vw, 1.32rem);
       line-height: 1.55;
-      color: var(--text);
-      max-width: 52ch;
     }
 
     .terminal-wrap {
-      margin-bottom: 36px;
+      max-width: 760px;
+      margin: 0 auto 56px;
     }
     .terminal-cap {
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 0 0 12px;
       color: var(--muted);
-      margin-bottom: 10px;
+      font-size: 0.82rem;
     }
     .terminal {
-      background: var(--terminal-bg);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 18px 20px;
+      background: var(--code);
+      border-radius: 18px;
+      box-shadow: 0 26px 80px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.06);
+      color: #f5f5f5;
+      padding: 22px 24px;
       font-family: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
-      font-size: 0.8125rem;
-      line-height: 1.65;
+      font-size: 0.86rem;
+      line-height: 1.7;
       overflow-x: auto;
     }
-    .terminal .prompt { color: var(--prompt); user-select: none; }
-    .terminal .cmd { color: var(--command); white-space: pre-wrap; word-break: break-all; }
-    .terminal .out { color: var(--output-dim); margin-top: 12px; white-space: pre-wrap; }
+    .terminal .prompt { color: var(--code-muted); user-select: none; }
+    .terminal .cmd { color: #fff; white-space: pre-wrap; word-break: break-word; }
+    .terminal .out { color: #d6d3d1; margin-top: 14px; white-space: pre-wrap; }
     .terminal-note {
       margin-top: 12px;
       font-size: 0.8125rem;
       color: var(--muted);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       line-height: 1.5;
+      text-align: center;
     }
 
     .install {
-      margin-bottom: 48px;
+      max-width: 760px;
+      margin: 0 auto 58px;
     }
     .install h2 {
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--muted);
-      margin: 0 0 10px;
+      margin: 0 0 12px;
+      font-size: 1rem;
+      letter-spacing: -0.02em;
     }
     .install pre {
       margin: 0;
-      padding: 16px 18px;
-      background: var(--terminal-bg);
-      border: 1px solid var(--line);
-      border-radius: 8px;
+      padding: 18px 20px;
+      background: var(--panel);
+      border: 1px solid var(--soft);
+      border-radius: 14px;
       font-size: 0.75rem;
       line-height: 1.55;
       overflow-x: auto;
-      color: var(--output-dim);
+      color: var(--charcoal);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.04);
+    }
+    .uses {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin: 0 0 58px;
+    }
+    .use {
+      min-height: 176px;
+      padding: 22px;
+      border: 1px solid var(--soft);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.78);
+      box-shadow: 0 10px 34px rgba(0,0,0,0.035);
+    }
+    .use h3 {
+      margin: 0 0 10px;
+      color: var(--charcoal);
+      font-size: 1.05rem;
+      letter-spacing: -0.02em;
+    }
+    .use p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.94rem;
+      line-height: 1.55;
+    }
+    .star-panel {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 22px;
+      padding: 28px;
+      margin: 0 0 42px;
+      border-radius: 22px;
+      background: var(--charcoal);
+      color: #fff;
+      box-shadow: 0 22px 70px rgba(0,0,0,0.16);
+    }
+    .star-panel p {
+      margin: 0;
+      max-width: 54ch;
+      color: #e7e5e4;
+      font-size: 1rem;
+    }
+    .star-panel strong { color: #fff; }
+    .star-panel a {
+      flex-shrink: 0;
+      color: var(--charcoal);
+      background: #fff;
+      text-decoration: none;
+      border-radius: 999px;
+      padding: 12px 18px;
+      font-size: 0.92rem;
+      font-weight: 720;
     }
 
     .foot {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      justify-content: center;
       font-size: 0.8125rem;
       color: var(--muted);
       line-height: 1.6;
     }
     .foot a { color: var(--muted); }
-    .foot a:hover { color: var(--text); }
+    .foot a:hover { color: var(--ink); }
+    @media (max-width: 760px) {
+      .wrap { padding-top: 28px; }
+      header { margin-bottom: 54px; }
+      .uses { grid-template-columns: 1fr; }
+      .star-panel { align-items: flex-start; flex-direction: column; }
+    }
   </style>
 </head>
 <body>
@@ -170,15 +262,19 @@
       </nav>
     </header>
 
-    <p class="lede">One command runs the container. You choose the image; on a typical Linux machine with NVIDIA, the GPU is wired in for you.</p>
+    <section class="hero">
+      <p class="eyebrow">Podman without ceremony</p>
+      <h2>Clean machines. One command.</h2>
+      <p class="lede">Launch a disposable, project-mounted Podman environment from the folder you are already in. Pick an image or Dockerfile; GPU access is detected when your host supports it.</p>
+    </section>
 
     <div class="terminal-wrap">
-      <p class="terminal-cap">Example</p>
+      <p class="terminal-cap"><span>custom CUDA image</span><span>GPU visible inside the container</span></p>
       <div class="terminal">
         <span class="prompt">$ </span><span class="cmd">podman-minimal --image docker.io/nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi -L</span>
-        <div class="out">GPU 0: NVIDIA GeForce RTX 5080 (UUID: GPU-e611ee94-8aa1-ec0c-cf66-dfb053851429)</div>
-        <p class="terminal-note">Output captured on a Linux host with rootless Podman and an NVIDIA GPU. Your line will match your hardware; without a GPU the same command still runs the image, but <code>nvidia-smi</code> may be empty or fail inside the container.</p>
+        <div class="out">GPU 0: NVIDIA GeForce RTX 5080</div>
       </div>
+      <p class="terminal-note">Same command shape works for CPU images, local Dockerfiles, one-off jobs, and long-running services.</p>
     </div>
 
     <section class="install">
@@ -187,7 +283,27 @@
       <p class="terminal-note" style="margin-top:10px;margin-bottom:0">Windows: use <code>python</code> instead of <code>python3</code>. Docs: <a href="https://github.com/vincenzoml/podman-minimal/blob/main/README.md">README</a>.</p>
     </section>
 
-    <p class="foot">© 2026 Vincenzo Ciancia · GPLv3+ · <a href="mailto:vincenzoml@gmail.com">vincenzoml@gmail.com</a></p>
+    <section class="uses" aria-label="Use cases">
+      <div class="use">
+        <h3>Interactive workspace</h3>
+        <p>Drop into a clean shell with your current project mounted, without installing toolchains on the host.</p>
+      </div>
+      <div class="use">
+        <h3>Batch commands</h3>
+        <p>Run tests, scripts, GPU probes, or one-shot jobs in the same reproducible container shape.</p>
+      </div>
+      <div class="use">
+        <h3>Persistent work</h3>
+        <p>Use <code>--nohup</code> for terminal-proof jobs or Linux user services for daemons.</p>
+      </div>
+    </section>
+
+    <section class="star-panel">
+      <p><strong>podman-minimal is free software.</strong> If it saves you time, please star the repository: it is the easiest way to say thanks and helps other developers find it.</p>
+      <a href="https://github.com/vincenzoml/podman-minimal">Star on GitHub</a>
+    </section>
+
+    <p class="foot"><span>© 2026 Vincenzo Ciancia</span><span>GPLv3+</span><a href="mailto:vincenzoml@gmail.com">vincenzoml@gmail.com</a></p>
   </main>
 </body>
 </html>
