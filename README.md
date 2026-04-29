@@ -34,6 +34,7 @@ python3 -c "import urllib.request as u; exec(u.urlopen('https://raw.githubuserco
 podman-minimal
 podman-minimal --image docker.io/library/debian:12 uname -a
 podman-minimal --dockerfile /path/to/Dockerfile
+podman-minimal --root --image docker.io/library/ubuntu:26.04 bash
 podman-minimal --host-root --image docker.io/library/ubuntu:26.04 ls /host
 podman-minimal --nohup run.log -- python3 -m http.server 8080
 ```
@@ -93,6 +94,19 @@ podman-minimal --image docker.io/library/rust:1.89 rustc --version
 ```bash
 podman-minimal --host-root -- bash -lc "ls /host && ls /host/Users"
 ```
+
+## Root mode inside container
+
+- Default behavior runs as your host UID/GID (`keep-id`), not as container root.
+- Use `--root` to run interactive shells and batch commands as container root.
+- This is the easiest way to install packages in the default Ubuntu image:
+
+```bash
+podman-minimal --root -- bash -lc "apt-get update && apt-get install -y sudo"
+```
+
+- `sudo` is often not installed in minimal images; in root mode you usually do not need `sudo` at all.
+- `su -` also depends on tools/users present in the image. Root mode avoids that dependency for admin tasks.
 
 ## Lifecycle
 

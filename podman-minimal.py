@@ -576,6 +576,7 @@ class RuntimeConfig:
     user_name: str
     user_home: Path
     mount_host_root: bool
+    run_as_root: bool
     verbose: bool
 
     @property
@@ -625,6 +626,8 @@ class PodmanLauncher:
         run(["podman", "pull", self.cfg.image])
 
     def _common_identity_args(self) -> List[str]:
+        if self.cfg.run_as_root:
+            return []
         return [
             "--user",
             f"{self.cfg.uid}:{self.cfg.gid}",
@@ -968,6 +971,11 @@ def parse_args() -> argparse.Namespace:
         help="Mount host root filesystem read-only at /host inside the container",
     )
     parser.add_argument(
+        "--root",
+        action="store_true",
+        help="Run interactive/batch container commands as root (no keep-id user mapping)",
+    )
+    parser.add_argument(
         "--rebuild-image",
         action="store_true",
         help="Run podman build even when the image tag already exists (default skips build)",
@@ -1073,6 +1081,7 @@ def main() -> int:
         user_name=user_name,
         user_home=user_home,
         mount_host_root=args.host_root,
+        run_as_root=args.root,
         verbose=VERBOSE,
     )
     launcher = PodmanLauncher(cfg)
