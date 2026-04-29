@@ -355,6 +355,9 @@ def install_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
             if changed:
                 infoprint(f"Added to user PATH: {target_parent}")
                 infoprint("Open a new terminal to pick up updated PATH.")
+            elif windows_user_registry_path_contains(target_parent):
+                infoprint(f"Install directory is already in user PATH: {target_parent}")
+                infoprint("Open a new terminal to pick up updated PATH.")
             else:
                 infoprint(f"Note: add this directory to PATH to run `{COMMAND_NAME}` directly: {target_parent}")
                 infoprint(f"Current session (PowerShell): $env:Path += ';{target_parent}'")
@@ -505,6 +508,20 @@ def ensure_windows_user_path(path_value: Path) -> bool:
         new_value = ";".join(entries + [target]) if entries else target
         winreg.SetValueEx(key, "Path", 0, winreg.REG_EXPAND_SZ, new_value)
     return True
+
+
+def windows_user_registry_path_contains(path_value: Path) -> bool:
+    if host_os() != "windows" or winreg is None:
+        return False
+    target = str(path_value).strip().lower().rstrip("\\/")
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment", 0, winreg.KEY_READ) as key:
+        try:
+            current, _reg_type = winreg.QueryValueEx(key, "Path")
+        except FileNotFoundError:
+            return False
+    entries = [p.strip() for p in str(current).split(";") if p.strip()]
+    normalized = {p.lower().rstrip("\\/") for p in entries}
+    return target in normalized
 
 
 def ensure_user_linger(user_name: str) -> None:
