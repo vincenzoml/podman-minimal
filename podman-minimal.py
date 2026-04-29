@@ -41,7 +41,7 @@ except ImportError:
     grp = None
 
 
-DEFAULT_IMAGE = "docker.io/nvidia/cuda:12.4.1-base-ubuntu22.04"
+DEFAULT_IMAGE = "docker.io/library/ubuntu:26.04"
 DEFAULT_PORT = 18080
 VERSION = "1.0"
 DEFAULT_INSTALL_DIR = "/usr/local/bin"
@@ -443,7 +443,7 @@ def init_devcontainer(launch_dir: Path) -> None:
             dockerfile_path,
             "\n".join(
                 [
-                    "FROM docker.io/nvidia/cuda:12.4.1-base-ubuntu22.04",
+                    "FROM docker.io/library/ubuntu:26.04",
                     "",
                     "RUN apt-get update && apt-get install -y --no-install-recommends \\",
                     "    ca-certificates \\",
