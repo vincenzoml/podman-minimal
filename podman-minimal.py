@@ -129,8 +129,12 @@ def announce_sudo(action: str) -> None:
     eprint(f"About to request sudo: {action}")
 
 
-def run(cmd: List[str], check: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, check=check, text=True)
+def run(cmd: List[str], check: bool = True, quiet: bool = False) -> subprocess.CompletedProcess:
+    kwargs = {"check": check, "text": True}
+    if quiet:
+        kwargs["stdout"] = subprocess.DEVNULL
+        kwargs["stderr"] = subprocess.DEVNULL
+    return subprocess.run(cmd, **kwargs)
 
 
 def run_capture(cmd: List[str], check: bool = True) -> str:
@@ -309,7 +313,7 @@ def install_podman_if_missing() -> None:
 
 
 def podman_is_reachable() -> bool:
-    return run(["podman", "system", "info"], check=False).returncode == 0
+    return run(["podman", "system", "info"], check=False, quiet=True).returncode == 0
 
 
 def ensure_podman_connection() -> None:
@@ -324,11 +328,11 @@ def ensure_podman_connection() -> None:
         f"{os_name}..."
     )
 
-    started = run(["podman", "machine", "start"], check=False).returncode == 0
+    started = run(["podman", "machine", "start"], check=False, quiet=not VERBOSE).returncode == 0
     if not started:
         vprint("No running/default Podman machine detected; trying `podman machine init`.")
-        run(["podman", "machine", "init"], check=False)
-        run(["podman", "machine", "start"], check=False)
+        run(["podman", "machine", "init"], check=False, quiet=not VERBOSE)
+        run(["podman", "machine", "start"], check=False, quiet=not VERBOSE)
 
     for _ in range(5):
         if podman_is_reachable():
@@ -754,8 +758,28 @@ class RuntimeConfig:
         return f"{self.launch_dir}:{self.launch_dir}:Z"
 
     @property
+    def container_workdir(self) -> str:
+        if host_os() == "windows":
+            return "/workspace"
+        return str(self.launch_dir)
+
+    @property
+    def project_mount_args(self) -> List[str]:
+        if host_os() == "windows":
+            return [
+                "--mount",
+                f"type=bind,source={self.launch_dir},target={self.container_workdir}",
+            ]
+        return ["-v", self.project_mount]
+
+    @property
     def host_root_mount(self) -> str:
         return "/:/host:ro"
+
+    @property
+    def container_shell(self) -> str:
+        # `sh` is more universally available across container variants than `bash`.
+        return "sh"
 
 
 class PodmanLauncher:
@@ -777,7 +801,7 @@ class PodmanLauncher:
         context = resolve_build_context(dockerfile)
         if (
             not self.cfg.force_image_rebuild
-            and run(["podman", "image", "exists", self.cfg.image], check=False).returncode == 0
+            and run(["podman", "image", "exists", self.cfg.image], check=False, quiet=True).returncode == 0
         ):
             vprint(f"Skipping build (image exists: {self.cfg.image}); use --rebuild-image to rebuild")
             return
@@ -785,15 +809,18 @@ class PodmanLauncher:
             vprint(f"Using Dockerfile: {dockerfile}")
             vprint(f"Build context: {context}")
         vprint(f"Building image from Dockerfile: {dockerfile}")
-        run(["podman", "build", "-f", str(dockerfile), "-t", self.cfg.image, str(context)])
+        run(
+            ["podman", "build", "-f", str(dockerfile), "-t", self.cfg.image, str(context)],
+            quiet=not self.cfg.verbose,
+        )
 
     def ensure_image(self) -> None:
-        image_exists = run(["podman", "image", "exists", self.cfg.image], check=False).returncode == 0
+        image_exists = run(["podman", "image", "exists", self.cfg.image], check=False, quiet=True).returncode == 0
         if image_exists:
             vprint(f"Using local image: {self.cfg.image}")
             return
         vprint(f"Pulling image: {self.cfg.image}")
-        run(["podman", "pull", self.cfg.image])
+        run(["podman", "pull", self.cfg.image], quiet=not self.cfg.verbose)
 
     def _common_identity_args(self) -> List[str]:
         if self.cfg.run_as_root:
@@ -810,29 +837,32 @@ class PodmanLauncher:
             return []
         return ["-v", self.cfg.host_root_mount]
 
-    def shell_mode(self) -> None:
+    def shell_mode(self) -> int:
         args = [
             "podman",
             "run",
             "--rm",
             "-it",
+            "--replace",
             "--name",
             f"{self.cfg.container_name}-shell",
             *self._common_identity_args(),
             "-e",
-            f"HOME={self.cfg.launch_dir}",
-            "-v",
-            self.cfg.project_mount,
+            f"HOME={self.cfg.container_workdir}",
+            *self.cfg.project_mount_args,
             *self._optional_host_root_args(),
             *self.nvidia_tool_mount_args,
             "-w",
-            str(self.cfg.launch_dir),
+            self.cfg.container_workdir,
             *self.gpu_args,
             self.cfg.image,
-            "bash",
+            self.cfg.container_shell,
         ]
         vprint(f"Starting interactive shell in {self.cfg.image}")
+        if host_os() == "windows":
+            return run(args, check=False).returncode
         os.execvp(args[0], args)
+        return 0
 
     def build_run_command_args(self, command: List[str]) -> List[str]:
         if not command:
@@ -843,13 +873,12 @@ class PodmanLauncher:
             "--rm",
             *self._common_identity_args(),
             "-e",
-            f"HOME={self.cfg.launch_dir}",
-            "-v",
-            self.cfg.project_mount,
+            f"HOME={self.cfg.container_workdir}",
+            *self.cfg.project_mount_args,
             *self._optional_host_root_args(),
             *self.nvidia_tool_mount_args,
             "-w",
-            str(self.cfg.launch_dir),
+            self.cfg.container_workdir,
             *self.gpu_args,
             self.cfg.image,
             *command,
@@ -913,12 +942,11 @@ class PodmanLauncher:
             f"{self.cfg.port}:{self.cfg.container_port}",
             *self._common_identity_args(),
             "-e",
-            f"HOME={self.cfg.launch_dir}",
-            "-v",
-            self.cfg.project_mount,
+            f"HOME={self.cfg.container_workdir}",
+            *self.cfg.project_mount_args,
             *self.nvidia_tool_mount_args,
             "-w",
-            str(self.cfg.launch_dir),
+            self.cfg.container_workdir,
             *self.gpu_args,
             self.cfg.image,
             *service_cmd,
@@ -944,12 +972,11 @@ class PodmanLauncher:
             f"{self.cfg.port}:{self.cfg.container_port}",
             *self._common_identity_args(),
             "-e",
-            f"HOME={self.cfg.launch_dir}",
-            "-v",
-            self.cfg.project_mount,
+            f"HOME={self.cfg.container_workdir}",
+            *self.cfg.project_mount_args,
             *self.nvidia_tool_mount_args,
             "-w",
-            str(self.cfg.launch_dir),
+            self.cfg.container_workdir,
             *self.gpu_args,
             self.cfg.image,
             *service_cmd,
@@ -1280,7 +1307,7 @@ def main() -> int:
     elif command:
         return launcher.run_command_mode(command)
     else:
-        launcher.shell_mode()
+        return launcher.shell_mode()
     return 0
 
 
