@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>podman-minimal</title>
+  <meta name="description" content="Run clean Podman dev/runtime environments from any folder with one command." />
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #111833;
+      --text: #e9ecf8;
+      --muted: #aab3d6;
+      --accent: #7c9cff;
+      --accent2: #49dcb1;
+      --border: #25305f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 16px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text);
+      background: radial-gradient(1200px 500px at 80% -10%, #243b8f 0%, transparent 60%), var(--bg);
+    }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 40px 20px 64px; }
+    .hero { margin-bottom: 26px; }
+    h1 { font-size: 42px; line-height: 1.05; margin: 0 0 10px; letter-spacing: -0.02em; }
+    .sub { color: var(--muted); margin: 0 0 22px; font-size: 18px; }
+    .cta {
+      display: inline-block; padding: 10px 14px; border-radius: 10px; text-decoration: none;
+      color: #061027; background: linear-gradient(90deg, var(--accent2), #86f7d5);
+      font-weight: 700; margin-right: 10px;
+    }
+    .link { color: var(--text); text-decoration: none; border-bottom: 1px solid #5868a8; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 14px; margin: 22px 0 28px; }
+    .card {
+      background: linear-gradient(180deg, #141c3c, #111833);
+      border: 1px solid var(--border); border-radius: 14px; padding: 14px;
+    }
+    h2 { font-size: 21px; margin: 0 0 10px; }
+    h3 { font-size: 16px; margin: 14px 0 8px; color: #d3daf8; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    pre {
+      margin: 0; background: #0a122a; border: 1px solid #26356e; color: #d4ddff;
+      border-radius: 10px; padding: 11px; overflow-x: auto; font-size: 13px;
+    }
+    ul { margin: 8px 0 0 20px; padding: 0; color: var(--muted); }
+    .foot { margin-top: 22px; color: var(--muted); font-size: 14px; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <h1>podman-minimal</h1>
+      <p class="sub">Run clean Podman dev/runtime environments from any folder with one command.</p>
+      <a class="cta" href="https://github.com/vincenzoml/podman-minimal">Star on GitHub ⭐</a>
+      <a class="link" href="https://github.com/vincenzoml/podman-minimal">View repository</a>
+    </section>
+
+    <section class="card">
+      <h2>Install in one line</h2>
+      <h3>Linux / macOS</h3>
+      <pre><code>python3 -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/vincenzoml/podman-minimal/main/podman-minimal.py').read().decode())" --install</code></pre>
+      <h3>Windows (PowerShell)</h3>
+      <pre><code>python -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/vincenzoml/podman-minimal/main/podman-minimal.py').read().decode())" --install</code></pre>
+    </section>
+
+    <div class="grid">
+      <section class="card">
+        <h2>Minimal usage</h2>
+        <pre><code>podman-minimal
+podman-minimal nvidia-smi
+podman-minimal --dockerfile /path/to/Dockerfile
+podman-minimal --update
+podman-minimal --help</code></pre>
+      </section>
+      <section class="card">
+        <h2>Use cases</h2>
+        <ul>
+          <li>Interactive shell in a clean container.</li>
+          <li>One-shot batch command execution.</li>
+          <li>Per-repo isolated Podman workflow.</li>
+          <li>Daemonized services on Linux.</li>
+        </ul>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2>Platform behavior</h2>
+      <ul>
+        <li>Linux: auto-installs Podman via apt/dnf/yum/zypper/pacman.</li>
+        <li>macOS: auto-installs Homebrew if needed, then installs Podman.</li>
+        <li>Windows: installs Podman via winget (or choco fallback).</li>
+        <li>Daemon and system Quadlet features are Linux-only.</li>
+      </ul>
+    </section>
+
+    <p class="foot">If this project helps you, please star the repo to say thanks ⭐</p>
+  </main>
+</body>
+</html>
