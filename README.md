@@ -12,20 +12,20 @@ Run clean Podman environments from any folder.
 Linux / macOS:
 
 ```bash
-python3 -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/vincenzoml/podman-minimal/main/podman-minimal.py').read().decode())" --install
+python3 -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/vincenzoml/podman-minimal/refs/heads/main/podman-minimal.py').read().decode())" --install
 ```
 
 Windows PowerShell:
 
 ```powershell
-python -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/vincenzoml/podman-minimal/main/podman-minimal.py').read().decode())" --install
+python -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/vincenzoml/podman-minimal/refs/heads/main/podman-minimal.py').read().decode())" --install
 ```
 
 User-local install:
 
 ```bash
 mkdir -p ~/.local/bin
-python3 -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/vincenzoml/podman-minimal/main/podman-minimal.py').read().decode())" --install ~/.local/bin
+python3 -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/vincenzoml/podman-minimal/refs/heads/main/podman-minimal.py').read().decode())" --install ~/.local/bin
 ```
 
 ## Usage
