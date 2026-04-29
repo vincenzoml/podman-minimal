@@ -14,7 +14,7 @@ Run clean Podman dev/runtime environments from any folder with one command. Root
 
 ## Install (one-liners)
 
-You only need Python. Podman is installed automatically if it is missing (see [Sudo and safety](#sudo-and-safety) for when privileges are involved).
+You only need Python. If Podman is missing, the launcher can install it after an explicit interactive confirmation (see [Sudo and safety](#sudo-and-safety)).
 
 ### Linux / macOS
 
@@ -94,12 +94,12 @@ The launcher is designed to **not** require elevated privileges for everyday con
 | Situation | Behavior |
 |-----------|----------|
 | **Normal run** (shell, `podman run`, etc.) | No `sudo` from this script. |
-| **`--install` / `--uninstall` / `--update`** | Writes only the `podman-minimal` binary. Unprivileged write is tried first; **`sudo` is used only if** the target path is not writable or removal fails. Prefer `--install ~/.local/bin` on shared or strict machines. |
-| **Auto-install Podman (Linux)** | Uses your distro package manager **with** `sudo`. Install Podman yourself first if you do not want that. |
-| **Auto-install Podman (macOS)** | May run the official Homebrew installer (interactive) and `brew install podman`. |
-| **Auto-install Podman (Windows)** | Uses `winget` or `choco` (often elevation is handled by those tools). |
+| **`--install` / `--uninstall` / `--update`** | Writes only the `podman-minimal` binary. Unprivileged write/removal is tried first; **`sudo` is used only if** the target path is protected. Missing privileged directories are **not** created with `sudo`; create them yourself or use `--install ~/.local/bin`. |
+| **Auto-install Podman (Linux)** | Asks first, then uses your distro package manager **with** `sudo`. Install Podman yourself first if you do not want that. |
+| **Auto-install Podman (macOS)** | Asks first. If Homebrew is missing, it runs the official Homebrew installer; then asks/uses `brew install podman`. |
+| **Auto-install Podman (Windows)** | Asks first, then uses `winget` or `choco` (elevation is handled by those tools). |
 | **`--daemon-install`** | May use **`sudo`** once for `loginctl enable-linger` if linger is not already enabled. |
-| **`--install --uid … --dir …`** (Quadlet) | Requires **root**; writes under `/etc/containers/systemd`. Opt-in only. |
+| **`--install --uid … --dir …`** (Quadlet) | Requires **root on Linux**; writes under `/etc/containers/systemd`. If not root, it aborts before installing the command to avoid partial setup. Opt-in only. |
 
 **Opt out of `sudo` from this script:** set `PODMAN_MINIMAL_NO_SUDO=1`. Then any step that would require `sudo` fails with a clear error instead of invoking it (install Podman and pick a user-writable `--install` path yourself).
 
@@ -109,6 +109,8 @@ podman-minimal --install ~/.local/bin   # ok if writable
 ```
 
 Canceling a password prompt aborts that step; the script does not bypass your approval.
+
+For automation where you intentionally want package-manager installs without an interactive confirmation, set `PODMAN_MINIMAL_ASSUME_YES=1`. This does **not** bypass `sudo`, `winget`, `choco`, Homebrew, or OS-level approval prompts.
 
 ---
 
@@ -153,9 +155,9 @@ Creates `.devcontainers/Dockerfile` and `devcontainer.json` in the current direc
 
 ## Platform summary
 
-- **Linux:** GPU-friendly defaults; Podman auto-install via `apt-get`, `dnf`, `yum`, `zypper`, or `pacman` (with `sudo` unless Podman is already installed or `PODMAN_MINIMAL_NO_SUDO=1`).
-- **macOS:** Homebrew installed if missing, then `brew install podman`.
-- **Windows:** `winget` preferred, else `choco`.
+- **Linux:** GPU-friendly defaults; Podman install via `apt-get`, `dnf`, `yum`, `zypper`, or `pacman` after confirmation (with `sudo` unless Podman is already installed or `PODMAN_MINIMAL_NO_SUDO=1`).
+- **macOS:** Homebrew installed if missing after confirmation, then `brew install podman`.
+- **Windows:** `winget` preferred, else `choco`, after confirmation.
 
 ---
 

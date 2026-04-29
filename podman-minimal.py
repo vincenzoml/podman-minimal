@@ -57,6 +57,29 @@ def sudo_allowed() -> bool:
     return val not in ("1", "true", "yes", "on")
 
 
+def assume_yes() -> bool:
+    val = os.environ.get("PODMAN_MINIMAL_ASSUME_YES", "").strip().lower()
+    return val in ("1", "true", "yes", "on")
+
+
+def eprint(message: str) -> None:
+    print(message, file=sys.stderr)
+
+
+def confirm_host_change(message: str) -> None:
+    """Ask before package-manager or installer operations that modify the host."""
+    if assume_yes():
+        return
+    if not sys.stdin.isatty():
+        raise RuntimeError(
+            f"{message} Refusing to continue without an interactive terminal. "
+            "Install the dependency yourself or set PODMAN_MINIMAL_ASSUME_YES=1."
+        )
+    answer = input(f"{message} Continue? [Y/n] ").strip().lower()
+    if answer not in ("", "y", "yes"):
+        raise RuntimeError("Cancelled by user.")
+
+
 def require_sudo_capability(explanation: str) -> None:
     if not sudo_allowed():
         raise RuntimeError(
@@ -98,7 +121,8 @@ def host_os() -> str:
 def install_homebrew_if_missing() -> None:
     if shutil.which("brew"):
         return
-    vprint("Homebrew not found; installing Homebrew first...")
+    confirm_host_change("Homebrew is missing; podman-minimal can run the official Homebrew installer.")
+    eprint("Installing Homebrew via the official installer...")
     run(
         [
             "/bin/bash",
@@ -112,8 +136,9 @@ def install_podman_if_missing() -> None:
     if shutil.which("podman") is not None:
         return
     os_name = host_os()
-    vprint("Podman not found; attempting automatic install...")
+    eprint("Podman not found.")
     if os_name == "linux":
+        confirm_host_change("podman-minimal can install Podman with your Linux package manager using sudo.")
         require_sudo_capability("Automatic Podman install on Linux uses sudo with your package manager.")
         installers: List[List[str]] = []
         if shutil.which("apt-get"):
@@ -134,6 +159,7 @@ def install_podman_if_missing() -> None:
                 "Podman is missing and no supported Linux package manager was detected "
                 "(supported: apt-get, dnf, yum, zypper, pacman)."
             )
+        eprint(f"Running: {' && '.join(' '.join(cmd) for cmd in installers)}")
         for cmd in installers:
             run(cmd)
     elif os_name == "macos":
@@ -141,11 +167,17 @@ def install_podman_if_missing() -> None:
         brew_bin = shutil.which("brew")
         if not brew_bin:
             raise RuntimeError("Homebrew installation did not succeed. Install Podman manually.")
+        confirm_host_change("podman-minimal can install Podman with Homebrew.")
+        eprint("Running: brew install podman")
         run([brew_bin, "install", "podman"])
     elif os_name == "windows":
         if shutil.which("winget"):
+            confirm_host_change("podman-minimal can install Podman with winget.")
+            eprint("Running: winget install -e --id RedHat.Podman")
             run(["winget", "install", "-e", "--id", "RedHat.Podman"])
         elif shutil.which("choco"):
+            confirm_host_change("podman-minimal can install Podman with Chocolatey.")
+            eprint("Running: choco install -y podman")
             run(["choco", "install", "-y", "podman"])
         else:
             raise RuntimeError(
@@ -164,21 +196,30 @@ def install_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
         script_bytes = script_path.read_bytes()
     else:
         script_bytes = urlopen(RAW_START_PY_URL).read()
-    target = Path(target_dir).expanduser() / COMMAND_NAME
+    target_parent = Path(target_dir).expanduser()
+    target = target_parent / COMMAND_NAME
+    if not target_parent.exists():
+        try:
+            target_parent.mkdir(parents=True, exist_ok=True)
+        except PermissionError as err:
+            raise RuntimeError(
+                f"Install directory does not exist and cannot be created without elevated privileges: {target_parent}. "
+                "Create it yourself first, or choose an existing writable directory such as ~/.local/bin."
+            ) from err
     try:
-        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(script_bytes)
         os.chmod(target, 0o755)
     except PermissionError:
         require_sudo_capability(
             f"Cannot write `{target}` without permission."
         )
-        tmp_src = Path("/tmp/podman-minimal.py")
-        tmp_src.write_bytes(script_bytes)
-        run(["sudo", "mkdir", "-p", str(target.parent)])
-        run(["sudo", "cp", str(tmp_src), str(target)])
-        run(["sudo", "chmod", "755", str(target)])
-        run(["rm", "-f", str(tmp_src)])
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            tmp.write(script_bytes)
+            tmp_src = Path(tmp.name)
+        try:
+            run(["sudo", "install", "-m", "755", str(tmp_src), str(target)])
+        finally:
+            tmp_src.unlink(missing_ok=True)
     vprint(f"Installed launcher: {target}")
     vprint(f"Run it from anywhere with: {target.name}")
 
@@ -210,6 +251,11 @@ def update_self() -> None:
             "--update only works from an installed 'podman-minimal' command, "
             "not from the repository script file."
         )
+    installed_path = shutil.which(COMMAND_NAME)
+    if installed_path is None or Path(installed_path).resolve() != running_path:
+        raise RuntimeError(
+            "--update only works when the running script is the 'podman-minimal' command found on PATH."
+        )
     script_bytes = urlopen(RAW_START_PY_URL).read()
     try:
         with tempfile.NamedTemporaryFile(delete=False, dir=str(running_path.parent)) as tmp:
@@ -222,22 +268,21 @@ def update_self() -> None:
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
             tmp.write(script_bytes)
             tmp_path = Path(tmp.name)
-        run(["sudo", "install", "-m", "755", str(tmp_path), str(running_path)])
-        run(["rm", "-f", str(tmp_path)])
+        try:
+            run(["sudo", "install", "-m", "755", str(tmp_path), str(running_path)])
+        finally:
+            tmp_path.unlink(missing_ok=True)
     vprint(f"Updated launcher in place: {running_path}")
     vprint("Restart any running podman-minimal sessions to use the new version.")
 
 
-def check_setup_prompt(script_invocation: str, auto_install: bool) -> None:
+def check_setup_prompt(script_invocation: str) -> None:
     install_target = str(Path(DEFAULT_INSTALL_DIR) / COMMAND_NAME)
     required_paths = [install_target]
     if host_os() == "linux":
         required_paths.append(SYSTEM_OCI_DIR)
     missing = [p for p in required_paths if not Path(p).exists()]
     if not missing:
-        return
-    if auto_install and sys.stdin.isatty():
-        install_self()
         return
     vprint("Setup check: some standard host paths are missing:")
     for item in missing:
@@ -831,10 +876,16 @@ def main() -> int:
         return 0
 
     if args.install:
-        install_self(args.install)
         if args.uid is not None or args.dir is not None:
             if args.uid is None or args.dir is None:
                 raise RuntimeError("--install system setup requires both --uid and --dir")
+            if host_os() != "linux" or not hasattr(os, "geteuid") or os.geteuid() != 0:
+                raise RuntimeError(
+                    "--install with --uid/--dir performs system Quadlet setup and must be run as root on Linux. "
+                    "No files were installed."
+                )
+        install_self(args.install)
+        if args.uid is not None or args.dir is not None:
             install_root_quadlet(
                 project_dir=args.dir,
                 uid=args.uid,
@@ -857,7 +908,7 @@ def main() -> int:
     container_name = args.name or f"ubuntu-{user_name}"
     container_port = args.container_port if args.container_port is not None else args.port
     if VERBOSE and not args.install and not args.uninstall and not args.update:
-        check_setup_prompt(Path(sys.argv[0]).name, auto_install=True)
+        check_setup_prompt(Path(sys.argv[0]).name)
 
     if args.image_file:
         args.image = resolve_image_from_file(args.image_file.resolve())
