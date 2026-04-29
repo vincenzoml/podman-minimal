@@ -246,6 +246,40 @@ def install_podman_if_missing() -> None:
     vprint("Podman installation completed.")
 
 
+def podman_is_reachable() -> bool:
+    return run(["podman", "system", "info"], check=False).returncode == 0
+
+
+def ensure_podman_connection() -> None:
+    if podman_is_reachable():
+        return
+    os_name = host_os()
+    if os_name not in ("macos", "windows"):
+        return
+
+    eprint(
+        "Cannot connect to Podman. Trying automatic machine initialization/startup for "
+        f"{os_name}..."
+    )
+
+    started = run(["podman", "machine", "start"], check=False).returncode == 0
+    if not started:
+        vprint("No running/default Podman machine detected; trying `podman machine init`.")
+        run(["podman", "machine", "init"], check=False)
+        run(["podman", "machine", "start"], check=False)
+
+    for _ in range(5):
+        if podman_is_reachable():
+            vprint("Podman connection is ready.")
+            return
+        time.sleep(1)
+
+    raise RuntimeError(
+        "Unable to connect to Podman after attempting automatic machine setup. "
+        "Run `podman machine init` and `podman machine start`, then retry."
+    )
+
+
 def install_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
     script_file = globals().get("__file__")
     script_path = Path(script_file).resolve() if script_file else None
@@ -971,6 +1005,7 @@ def main() -> int:
         return 0
 
     install_podman_if_missing()
+    ensure_podman_connection()
     if VERBOSE:
         vprint(f"{COMMAND_NAME} {VERSION}")
         vprint(f"Update hint: run `{COMMAND_NAME} --update`")
