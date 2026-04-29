@@ -289,11 +289,11 @@ def install_podman_if_missing() -> None:
         if shutil.which("winget"):
             confirm_host_change("podman-minimal can install Podman with winget.")
             eprint("Running: winget install -e --id RedHat.Podman")
-            run(["winget", "install", "-e", "--id", "RedHat.Podman"])
+            run(["winget", "install", "-e", "--id", "RedHat.Podman"], check=False)
         elif shutil.which("choco"):
             confirm_host_change("podman-minimal can install Podman with Chocolatey.")
             eprint("Running: choco install -y podman")
-            run(["choco", "install", "-y", "podman"])
+            run(["choco", "install", "-y", "podman"], check=False)
         else:
             raise RuntimeError(
                 "Podman is missing and neither winget nor choco were found. Install Podman manually."
