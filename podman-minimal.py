@@ -92,6 +92,10 @@ def require_sudo_capability(explanation: str) -> None:
     ensure_command_exists("sudo")
 
 
+def announce_sudo(action: str) -> None:
+    eprint(f"About to request sudo: {action}")
+
+
 def run(cmd: List[str], check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, check=check, text=True)
 
@@ -212,6 +216,8 @@ def install_podman_if_missing() -> None:
             )
         eprint(f"Running: {' && '.join(' '.join(cmd) for cmd in installers)}")
         for cmd in installers:
+            if cmd and cmd[0] == "sudo":
+                announce_sudo("install Podman via your Linux package manager")
             run(cmd)
     elif os_name == "macos":
         install_homebrew_if_missing()
@@ -269,6 +275,7 @@ def install_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
             tmp.write(script_bytes)
             tmp_src = Path(tmp.name)
         try:
+            announce_sudo(f"install launcher to {target}")
             run(["sudo", "install", "-m", "755", str(tmp_src), str(target)])
         finally:
             tmp_src.unlink(missing_ok=True)
@@ -287,6 +294,7 @@ def uninstall_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
         target.unlink()
     except PermissionError:
         require_sudo_capability(f"Cannot remove `{target}` without permission.")
+        announce_sudo(f"remove launcher at {target}")
         run(["sudo", "rm", "-f", str(target)])
     infoprint(f"Removed launcher: {target}")
 
@@ -319,6 +327,7 @@ def update_self() -> None:
             tmp.write(script_bytes)
             tmp_path = Path(tmp.name)
         try:
+            announce_sudo(f"update launcher at {running_path}")
             run(["sudo", "install", "-m", "755", str(tmp_path), str(running_path)])
         finally:
             tmp_path.unlink(missing_ok=True)
@@ -354,6 +363,7 @@ def ensure_user_linger(user_name: str) -> None:
         return
     require_sudo_capability("Enabling linger for your user may require sudo.")
     vprint(f"Enabling linger for user '{user_name}' (sudo may prompt)...")
+    announce_sudo(f"enable systemd linger for user {user_name}")
     proc = run(["sudo", "loginctl", "enable-linger", user_name], check=False)
     if proc.returncode != 0:
         raise RuntimeError(
