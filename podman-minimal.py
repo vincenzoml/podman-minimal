@@ -20,9 +20,10 @@ from typing import List
 
 DEFAULT_IMAGE = "docker.io/nvidia/cuda:12.4.1-base-ubuntu22.04"
 DEFAULT_PORT = 18080
-INSTALL_TARGET = "/usr/local/bin/podman-minimal"
+DEFAULT_INSTALL_DIR = "/usr/local/bin"
+COMMAND_NAME = "podman-minimal"
 SYSTEM_OCI_DIR = "/etc/containers/systemd"
-RAW_START_PY_URL = "https://raw.githubusercontent.com/vincenzoml/podman-minimal/main/start.py"
+RAW_START_PY_URL = "https://raw.githubusercontent.com/vincenzoml/podman-minimal/main/podman-minimal.py"
 
 
 def run(cmd: List[str], check: bool = True) -> subprocess.CompletedProcess:
@@ -39,21 +40,53 @@ def ensure_command_exists(name: str) -> None:
         raise RuntimeError(f"Required command not found: {name}")
 
 
-def install_self(target_path: str = INSTALL_TARGET) -> None:
+def install_podman_if_missing() -> None:
+    if shutil.which("podman") is not None:
+        return
+    ensure_command_exists("sudo")
+    installers: List[List[str]] = []
+    if shutil.which("apt-get"):
+        installers = [
+            ["sudo", "apt-get", "update"],
+            ["sudo", "apt-get", "install", "-y", "podman"],
+        ]
+    elif shutil.which("dnf"):
+        installers = [["sudo", "dnf", "install", "-y", "podman"]]
+    elif shutil.which("yum"):
+        installers = [["sudo", "yum", "install", "-y", "podman"]]
+    elif shutil.which("zypper"):
+        installers = [["sudo", "zypper", "--non-interactive", "install", "podman"]]
+    elif shutil.which("pacman"):
+        installers = [["sudo", "pacman", "-S", "--noconfirm", "podman"]]
+    if not installers:
+        raise RuntimeError(
+            "Podman is missing and no supported package manager was detected "
+            "(supported: apt-get, dnf, yum, zypper, pacman)."
+        )
+    print("Podman not found; attempting automatic install (sudo may prompt)...")
+    for cmd in installers:
+        run(cmd)
+    ensure_command_exists("podman")
+    print("Podman installation completed.")
+
+
+def install_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
     script_file = globals().get("__file__")
     script_path = Path(script_file).resolve() if script_file else None
     if script_path is not None and script_path.exists() and script_path.name != "<stdin>":
         script_bytes = script_path.read_bytes()
     else:
         script_bytes = urlopen(RAW_START_PY_URL).read()
-    target = Path(target_path)
-    if os.geteuid() == 0:
+    target = Path(target_dir).expanduser() / COMMAND_NAME
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(script_bytes)
         os.chmod(target, 0o755)
-    else:
+    except PermissionError:
         ensure_command_exists("sudo")
-        tmp_src = Path("/tmp/podman-minimal.start.py")
+        tmp_src = Path("/tmp/podman-minimal.py")
         tmp_src.write_bytes(script_bytes)
+        run(["sudo", "mkdir", "-p", str(target.parent)])
         run(["sudo", "cp", str(tmp_src), str(target)])
         run(["sudo", "chmod", "755", str(target)])
         run(["rm", "-f", str(tmp_src)])
@@ -61,8 +94,22 @@ def install_self(target_path: str = INSTALL_TARGET) -> None:
     print(f"Run it from anywhere with: {target.name}")
 
 
+def uninstall_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
+    target = Path(target_dir).expanduser() / COMMAND_NAME
+    if not target.exists():
+        print(f"Not installed at: {target}")
+        return
+    try:
+        target.unlink()
+    except PermissionError:
+        ensure_command_exists("sudo")
+        run(["sudo", "rm", "-f", str(target)])
+    print(f"Removed launcher: {target}")
+
+
 def check_setup_prompt(script_invocation: str, auto_install: bool) -> None:
-    missing = [p for p in (INSTALL_TARGET, SYSTEM_OCI_DIR) if not Path(p).exists()]
+    install_target = str(Path(DEFAULT_INSTALL_DIR) / COMMAND_NAME)
+    missing = [p for p in (install_target, SYSTEM_OCI_DIR) if not Path(p).exists()]
     if not missing:
         return
     if auto_install and sys.stdin.isatty():
@@ -98,18 +145,15 @@ def resolve_image_from_file(image_file: Path) -> str:
     if not image_file.exists():
         raise RuntimeError(f"Image file not found: {image_file}")
     output = run_capture(["podman", "load", "-i", str(image_file)])
-    # podman load output example: "Loaded image: docker.io/library/ubuntu:24.04"
     match = re.search(r"Loaded image:\s*(\S+)", output)
     if match:
         return match.group(1)
-    # fallback: if format differs, return full output and let caller decide.
     raise RuntimeError(f"Could not parse loaded image name from: {output}")
 
 
 def project_name_from_path(path: Path) -> str:
     cleaned = "".join(c.lower() if (c.isalnum() or c in "._-") else "-" for c in path.name)
     cleaned = cleaned.strip("-")
-    # OCI/docker image paths cannot use a "."-prefixed repo component (.devcontainer is common).
     cleaned = cleaned.lstrip(".")
     cleaned = cleaned.strip("-")
     return cleaned or "project"
@@ -194,11 +238,6 @@ def find_default_dockerfile(launch_dir: Path, script_dir: Path) -> Path | None:
 
 
 def resolve_build_context(dockerfile: Path) -> Path:
-    """Build context directory for ``podman build``.
-    VS Code/Dev Containers convention: Dockerfile lives under ``.devcontainer/`` or
-    ``.devcontainers/``, and ``COPY`` paths are workspace-relative — i.e. ``build.context``: ``..``
-    in ``devcontainer.json``. Using only ``dockerfile.parent`` misses that and breaks COPY.
-    """
     dockerfile = dockerfile.resolve()
     parent = dockerfile.parent
     if parent.name in (".devcontainer", ".devcontainers"):
@@ -207,7 +246,6 @@ def resolve_build_context(dockerfile: Path) -> Path:
 
 
 def detect_gpu_args() -> List[str]:
-    # Prefer CDI (modern Podman/NVIDIA integration) when available.
     cdi_specs = [
         Path("/etc/cdi/nvidia.yaml"),
         Path("/var/run/cdi/nvidia.yaml"),
@@ -217,7 +255,6 @@ def detect_gpu_args() -> List[str]:
         if spec.exists():
             return ["--device", "nvidia.com/gpu=all"]
 
-    # Fallback to direct device node mapping.
     args: List[str] = []
     nvidia_nodes = [
         "/dev/nvidiactl",
@@ -550,7 +587,28 @@ def parse_args() -> argparse.Namespace:
         type=int,
         help="Container port (default: same as --port)",
     )
-    parser.add_argument("--install", action="store_true", help="Run one-time setup actions")
+    parser.add_argument(
+        "--install",
+        nargs="?",
+        const=DEFAULT_INSTALL_DIR,
+        metavar="DIR",
+        help="Install command into DIR (default: /usr/local/bin)",
+    )
+    parser.add_argument(
+        "--uninstall",
+        nargs="?",
+        const=DEFAULT_INSTALL_DIR,
+        metavar="DIR",
+        help="Remove command from DIR (default: /usr/local/bin)",
+    )
+    parser.add_argument(
+        "--unistall",
+        dest="uninstall",
+        nargs="?",
+        const=DEFAULT_INSTALL_DIR,
+        metavar="DIR",
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument("--daemon-install", action="store_true", help="Install/update user daemon")
     parser.add_argument("--daemon-remove", action="store_true", help="Remove user daemon")
     parser.add_argument("--daemon-status", action="store_true", help="Show user daemon status")
@@ -572,7 +630,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    ensure_command_exists("podman")
+    install_podman_if_missing()
     args = parse_args()
 
     launch_dir = Path.cwd()
@@ -582,7 +640,7 @@ def main() -> int:
     user_home = Path(f"/home/{user_name}")
     container_name = args.name or f"ubuntu-{user_name}"
     container_port = args.container_port if args.container_port is not None else args.port
-    if not args.install:
+    if not args.install and not args.uninstall:
         check_setup_prompt(Path(sys.argv[0]).name, auto_install=True)
 
     if args.image_file:
@@ -594,13 +652,18 @@ def main() -> int:
         args.daemon_status,
         args.daemon_logs,
         args.init_devcontainer,
+        bool(args.install),
+        bool(args.uninstall),
     ]
     if sum(1 for x in action_flags if x) > 1:
         raise RuntimeError("Choose only one action flag at a time")
 
+    if args.uninstall:
+        uninstall_self(args.uninstall)
+        return 0
+
     if args.install:
-        install_self()
-        # Unified one-time system setup path: install with UID+DIR.
+        install_self(args.install)
         if args.uid is not None or args.dir is not None:
             if args.uid is None or args.dir is None:
                 raise RuntimeError("--install system setup requires both --uid and --dir")
@@ -649,7 +712,6 @@ def main() -> int:
     elif args.daemon_logs:
         launcher.daemon_logs()
     elif command:
-        # Default behavior: any positional args are treated as command.
         return launcher.run_command_mode(command)
     else:
         launcher.shell_mode()
