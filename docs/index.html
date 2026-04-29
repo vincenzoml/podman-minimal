@@ -170,10 +170,29 @@
       border-radius: 14px;
       font-size: 0.75rem;
       line-height: 1.55;
-      overflow-x: auto;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
       color: var(--charcoal);
       box-shadow: 0 10px 40px rgba(0,0,0,0.04);
     }
+    .install-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .copy-btn {
+      border: 1px solid var(--soft);
+      background: #fff;
+      color: var(--charcoal);
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 0.78rem;
+      font-weight: 640;
+      cursor: pointer;
+    }
+    .copy-btn:hover { background: #f7f5f3; }
     .uses {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -299,8 +318,11 @@
     </div>
 
     <section class="install">
-      <h2>Install</h2>
-      <pre>python3 -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/vincenzoml/podman-minimal/main/podman-minimal.py').read().decode())" --install</pre>
+      <div class="install-bar">
+        <h2>Install</h2>
+        <button class="copy-btn" id="copy-install" type="button">Copy</button>
+      </div>
+      <pre id="install-cmd">python3 -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/vincenzoml/podman-minimal/main/podman-minimal.py').read().decode())" --install</pre>
       <p class="terminal-note" style="margin-top:10px;margin-bottom:0">Windows: use <code>python</code> instead of <code>python3</code>. Docs: <a href="https://github.com/vincenzoml/podman-minimal/blob/main/README.md">README</a>.</p>
     </section>
 
@@ -337,5 +359,28 @@
 
     <p class="foot"><span>© 2026 Vincenzo Ciancia</span><span>GPLv3+</span><a href="mailto:vincenzoml@gmail.com">vincenzoml@gmail.com</a></p>
   </main>
+  <script>
+    (() => {
+      const btn = document.getElementById("copy-install");
+      const cmd = document.getElementById("install-cmd");
+      if (!btn || !cmd || !navigator.clipboard) return;
+      const text = cmd.textContent || "";
+      btn.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          const old = btn.textContent;
+          btn.textContent = "Copied";
+          setTimeout(() => {
+            btn.textContent = old;
+          }, 1200);
+        } catch (_err) {
+          btn.textContent = "Copy failed";
+          setTimeout(() => {
+            btn.textContent = "Copy";
+          }, 1400);
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
