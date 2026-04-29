@@ -43,7 +43,7 @@ except ImportError:
 
 DEFAULT_IMAGE = "docker.io/nvidia/cuda:12.4.1-base-ubuntu22.04"
 DEFAULT_PORT = 18080
-VERSION = "0.9"
+VERSION = "1.0"
 DEFAULT_INSTALL_DIR = "/usr/local/bin"
 COMMAND_NAME = "podman-minimal"
 SYSTEM_OCI_DIR = "/etc/containers/systemd"
