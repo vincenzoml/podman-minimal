@@ -2,6 +2,10 @@
 
 Minimal launcher for rootless Podman with automatic GPU detection.
 
+```bash
+curl -fsSL https://raw.githubusercontent.com/vincenzoml/podman-minimal/main/start.py | python3 - --install
+```
+
 ## Prerequisites
 
 - `podman`
