@@ -186,6 +186,33 @@ def ensure_command_exists(name: str) -> None:
         raise RuntimeError(f"Required command not found: {name}")
 
 
+def add_to_process_path(path_value: Path) -> bool:
+    candidate = str(path_value)
+    entries = [p.strip() for p in os.environ.get("PATH", "").split(os.pathsep) if p.strip()]
+    normalized = {p.lower().rstrip("\\/") for p in entries}
+    key = candidate.lower().rstrip("\\/")
+    if key in normalized:
+        return False
+    os.environ["PATH"] = os.pathsep.join(entries + [candidate]) if entries else candidate
+    return True
+
+
+def refresh_windows_command_path(command: str) -> bool:
+    if host_os() != "windows" or shutil.which(command) is not None:
+        return False
+    local_app_data = os.environ.get("LOCALAPPDATA", "")
+    program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+    candidates = [
+        Path(program_files) / "RedHat" / "Podman",
+        Path(local_app_data) / "Microsoft" / "WinGet" / "Links",
+    ]
+    changed = False
+    for folder in candidates:
+        if folder.exists() and folder.is_dir():
+            changed = add_to_process_path(folder) or changed
+    return changed
+
+
 def vprint(message: str) -> None:
     if VERBOSE:
         print(message)
@@ -273,6 +300,8 @@ def install_podman_if_missing() -> None:
             )
     else:
         raise RuntimeError(f"Unsupported operating system: {os_name}")
+    if os_name == "windows":
+        refresh_windows_command_path("podman")
     ensure_command_exists("podman")
     vprint("Podman installation completed.")
 
