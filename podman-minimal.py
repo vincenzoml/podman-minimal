@@ -312,6 +312,33 @@ def install_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
             ) from err
     if not target_parent.is_dir():
         raise RuntimeError(f"Install target is not a directory: {target_parent}")
+    if host_os() == "windows":
+        target_py = target_parent / f"{COMMAND_NAME}.py"
+        target_cmd = target_parent / f"{COMMAND_NAME}.cmd"
+        atomic_write(target_py, script_bytes)
+        cmd_text = "\r\n".join(
+            [
+                "@echo off",
+                "setlocal",
+                f'set "PM_SCRIPT=%~dp0{COMMAND_NAME}.py"',
+                'where py >nul 2>nul',
+                "if %errorlevel%==0 (",
+                '  py "%PM_SCRIPT%" %*',
+                ") else (",
+                '  python "%PM_SCRIPT%" %*',
+                ")",
+                "",
+            ]
+        )
+        atomic_write_text(target_cmd, cmd_text)
+        infoprint(f"Installed launcher: {target_cmd}")
+        path_entries = [p.strip().lower() for p in os.environ.get("PATH", "").split(os.pathsep) if p.strip()]
+        if str(target_parent).lower() not in path_entries:
+            infoprint(f"Note: add this directory to PATH to run `{COMMAND_NAME}` directly: {target_parent}")
+            infoprint(f"Current session (PowerShell): $env:Path += ';{target_parent}'")
+        infoprint(f"Run it from anywhere with: {COMMAND_NAME}")
+        return
+
     try:
         atomic_write(target, script_bytes, mode=0o755)
     except PermissionError:
@@ -331,7 +358,28 @@ def install_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
 
 
 def uninstall_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
-    target = Path(target_dir).expanduser() / COMMAND_NAME
+    target_parent = Path(target_dir).expanduser()
+    if host_os() == "windows":
+        targets = [
+            target_parent / f"{COMMAND_NAME}.cmd",
+            target_parent / f"{COMMAND_NAME}.py",
+            target_parent / COMMAND_NAME,  # legacy Unix-style install on Windows
+        ]
+        removed: List[Path] = []
+        for target in targets:
+            if target.exists() or target.is_symlink():
+                if target.exists() and target.is_dir():
+                    raise RuntimeError(f"Refusing to remove directory: {target}")
+                target.unlink()
+                removed.append(target)
+        if not removed:
+            infoprint(f"Not installed at: {target_parent}")
+            return
+        for removed_path in removed:
+            infoprint(f"Removed launcher: {removed_path}")
+        return
+
+    target = target_parent / COMMAND_NAME
     if not target.exists() and not target.is_symlink():
         infoprint(f"Not installed at: {target}")
         return
@@ -355,16 +403,28 @@ def resolve_running_script_path() -> Path | None:
 
 def update_self() -> None:
     running_path = resolve_running_script_path()
-    if running_path is None or running_path.name != COMMAND_NAME:
+    if running_path is None:
         raise RuntimeError(
             "--update only works from an installed 'podman-minimal' command, "
             "not from the repository script file."
         )
-    installed_path = shutil.which(COMMAND_NAME)
-    if installed_path is None or Path(installed_path).resolve() != running_path:
-        raise RuntimeError(
-            "--update only works when the running script is the 'podman-minimal' command found on PATH."
-        )
+    if host_os() == "windows":
+        if running_path.name != f"{COMMAND_NAME}.py":
+            raise RuntimeError(
+                "--update on Windows works from the installed 'podman-minimal.cmd' launcher "
+                f"which invokes {COMMAND_NAME}.py."
+            )
+    else:
+        if running_path.name != COMMAND_NAME:
+            raise RuntimeError(
+                "--update only works from an installed 'podman-minimal' command, "
+                "not from the repository script file."
+            )
+        installed_path = shutil.which(COMMAND_NAME)
+        if installed_path is None or Path(installed_path).resolve() != running_path:
+            raise RuntimeError(
+                "--update only works when the running script is the 'podman-minimal' command found on PATH."
+            )
     script_bytes = urlopen(RAW_START_PY_URL).read()
     try:
         atomic_write(running_path, script_bytes, mode=0o755)
@@ -383,7 +443,8 @@ def update_self() -> None:
 
 
 def check_setup_prompt(script_invocation: str) -> None:
-    install_target = str(Path(DEFAULT_INSTALL_DIR) / COMMAND_NAME)
+    install_name = f"{COMMAND_NAME}.cmd" if host_os() == "windows" else COMMAND_NAME
+    install_target = str(Path(DEFAULT_INSTALL_DIR) / install_name)
     required_paths = [install_target]
     if host_os() == "linux":
         required_paths.append(SYSTEM_OCI_DIR)
