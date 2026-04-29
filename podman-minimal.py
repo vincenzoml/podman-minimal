@@ -23,7 +23,6 @@ import shlex
 import shutil
 import subprocess
 import sys
-import sysconfig
 import re
 import tempfile
 import platform
@@ -52,28 +51,9 @@ VERSION = "1.0"
 def compute_default_install_dir() -> str:
     if platform.system().lower() == "windows":
         local_app_data = os.environ.get("LOCALAPPDATA")
-        app_data = os.environ.get("APPDATA")
-        preferred_roots = [p.lower() for p in (local_app_data, app_data) if p]
-        path_entries = [p.strip() for p in os.environ.get("PATH", "").split(os.pathsep) if p.strip()]
-        for entry in path_entries:
-            entry_path = Path(entry).expanduser()
-            entry_norm = str(entry_path).lower()
-            if preferred_roots and not any(entry_norm.startswith(root) for root in preferred_roots):
-                continue
-            if not entry_path.exists() or not entry_path.is_dir():
-                continue
-            try:
-                with tempfile.NamedTemporaryFile(dir=str(entry_path), delete=True):
-                    pass
-                return str(entry_path)
-            except OSError:
-                continue
-        scripts_dir = sysconfig.get_path("scripts")
-        if scripts_dir:
-            return scripts_dir
         if local_app_data:
-            return str(Path(local_app_data) / "Programs" / "Python" / "Scripts")
-        return str(Path.home() / "AppData" / "Local" / "Programs" / "Python" / "Scripts")
+            return str(Path(local_app_data) / "Programs" / "podman-minimal" / "bin")
+        return str(Path.home() / "AppData" / "Local" / "Programs" / "podman-minimal" / "bin")
     return "/usr/local/bin"
 
 

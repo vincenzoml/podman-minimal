@@ -23,7 +23,7 @@ py -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent
 
 If `py` is not available yet, install Python first (Microsoft Store is fine), then run the command again.
 
-On Windows, `--install` defaults to your Python scripts directory (for example `%LocalAppData%\Programs\Python\Python314\Scripts`), not `/usr/local/bin`.
+On Windows, `--install` defaults to `%LocalAppData%\Programs\podman-minimal\bin` (a dedicated directory), not `/usr/local/bin`.
 The installer writes `podman-minimal.cmd` (launcher) and `podman-minimal.py` in that directory.
 If that directory is not already in `PATH`, the installer adds it to your user `PATH` automatically.
 
