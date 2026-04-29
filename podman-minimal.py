@@ -156,6 +156,10 @@ def vprint(message: str) -> None:
         print(message)
 
 
+def infoprint(message: str) -> None:
+    print(message)
+
+
 def host_os() -> str:
     name = platform.system().lower()
     if name == "darwin":
@@ -268,14 +272,14 @@ def install_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
             run(["sudo", "install", "-m", "755", str(tmp_src), str(target)])
         finally:
             tmp_src.unlink(missing_ok=True)
-    vprint(f"Installed launcher: {target}")
-    vprint(f"Run it from anywhere with: {target.name}")
+    infoprint(f"Installed launcher: {target}")
+    infoprint(f"Run it from anywhere with: {target.name}")
 
 
 def uninstall_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
     target = Path(target_dir).expanduser() / COMMAND_NAME
     if not target.exists() and not target.is_symlink():
-        vprint(f"Not installed at: {target}")
+        infoprint(f"Not installed at: {target}")
         return
     if target.exists() and target.is_dir():
         raise RuntimeError(f"Refusing to remove directory: {target}")
@@ -284,7 +288,7 @@ def uninstall_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
     except PermissionError:
         require_sudo_capability(f"Cannot remove `{target}` without permission.")
         run(["sudo", "rm", "-f", str(target)])
-    vprint(f"Removed launcher: {target}")
+    infoprint(f"Removed launcher: {target}")
 
 
 def resolve_running_script_path() -> Path | None:
@@ -318,8 +322,8 @@ def update_self() -> None:
             run(["sudo", "install", "-m", "755", str(tmp_path), str(running_path)])
         finally:
             tmp_path.unlink(missing_ok=True)
-    vprint(f"Updated launcher in place: {running_path}")
-    vprint("Restart any running podman-minimal sessions to use the new version.")
+    infoprint(f"Updated launcher in place: {running_path}")
+    infoprint("Restart any running podman-minimal sessions to use the new version.")
 
 
 def check_setup_prompt(script_invocation: str) -> None:
