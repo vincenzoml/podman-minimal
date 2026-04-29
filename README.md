@@ -32,13 +32,49 @@ python3 -c "import urllib.request as u; exec(u.urlopen('https://raw.githubuserco
 
 ```bash
 podman-minimal
-podman-minimal nvidia-smi
-podman-minimal --image docker.io/library/ubuntu:24.04 uname -a
+podman-minimal --image docker.io/library/debian:12 uname -a
 podman-minimal --dockerfile /path/to/Dockerfile
+podman-minimal --host-root --image docker.io/library/ubuntu:26.04 ls /host
 podman-minimal --nohup run.log -- python3 -m http.server 8080
 ```
 
 Default output is quiet: only Podman and your command speak. Use `-v` / `--verbose` for launcher details (version, image, Dockerfile, build context).
+
+## Default image
+
+- Default base image: `docker.io/library/ubuntu:26.04`.
+- If you run `podman-minimal` without `--image` and no local Dockerfile is discovered, this Ubuntu 26.04 image is pulled (once) and reused.
+- You can always override it per run with `--image`, for example:
+
+```bash
+podman-minimal --image docker.io/library/ubuntu:24.04 bash -lc "cat /etc/os-release"
+```
+
+## Useful base images (well-known)
+
+These are common, broadly useful defaults for different workflows:
+
+- `docker.io/library/ubuntu:26.04`  
+  General-purpose Ubuntu userland; good default for shell tools and apt-based workflows.
+- `docker.io/library/debian:12`  
+  Stable, conservative base for CI-style reproducibility and server-side utilities.
+- `docker.io/library/python:3.12-slim`  
+  Ready-to-use Python runtime with a smaller footprint than full distro images.
+- `docker.io/library/node:22-bookworm`  
+  Good starting point for JavaScript/TypeScript development and build tooling.
+- `docker.io/library/golang:1.23`  
+  Complete Go toolchain image for compiling and testing Go projects.
+- `docker.io/library/rust:1.89`  
+  Includes Rust toolchain and Cargo; useful for Rust build/test loops.
+
+Example overrides:
+
+```bash
+podman-minimal --image docker.io/library/python:3.12-slim python -V
+podman-minimal --image docker.io/library/node:22-bookworm node -v
+podman-minimal --image docker.io/library/golang:1.23 go version
+podman-minimal --image docker.io/library/rust:1.89 rustc --version
+```
 
 ## Why not plain podman run?
 
@@ -47,6 +83,16 @@ Default output is quiet: only Podman and your command speak. Use `-v` / `--verbo
 - Auto Dockerfile workflow: discover/build/reuse/pull without repeating boilerplate flags.
 - VS Code-compatible devcontainer handling (`.devcontainer` / `.devcontainers` context behavior).
 - Built-in convenience modes: `--nohup`, daemon helpers (Linux), quiet/verbose.
+
+## Mount behavior
+
+- Interactive shell and batch command runs mount only your current working directory by default.
+- The launcher does not mount your whole home directory by default.
+- Use `--host-root` to also mount the host root filesystem read-only at `/host` when you need to inspect the full host layout.
+
+```bash
+podman-minimal --host-root -- bash -lc "ls /host && ls /host/Users"
+```
 
 ## Lifecycle
 

@@ -575,11 +575,16 @@ class RuntimeConfig:
     gid: int
     user_name: str
     user_home: Path
+    mount_host_root: bool
     verbose: bool
 
     @property
     def project_mount(self) -> str:
         return f"{self.launch_dir}:{self.launch_dir}:Z"
+
+    @property
+    def host_root_mount(self) -> str:
+        return "/:/host:ro"
 
 
 class PodmanLauncher:
@@ -627,6 +632,11 @@ class PodmanLauncher:
             "keep-id",
         ]
 
+    def _optional_host_root_args(self) -> List[str]:
+        if not self.cfg.mount_host_root:
+            return []
+        return ["-v", self.cfg.host_root_mount]
+
     def shell_mode(self) -> None:
         args = [
             "podman",
@@ -637,11 +647,10 @@ class PodmanLauncher:
             f"{self.cfg.container_name}-shell",
             *self._common_identity_args(),
             "-e",
-            f"HOME={self.cfg.user_home}",
-            "-v",
-            f"{self.cfg.user_home}:{self.cfg.user_home}:Z",
+            f"HOME={self.cfg.launch_dir}",
             "-v",
             self.cfg.project_mount,
+            *self._optional_host_root_args(),
             *self.nvidia_tool_mount_args,
             "-w",
             str(self.cfg.launch_dir),
@@ -661,11 +670,10 @@ class PodmanLauncher:
             "--rm",
             *self._common_identity_args(),
             "-e",
-            f"HOME={self.cfg.user_home}",
-            "-v",
-            f"{self.cfg.user_home}:{self.cfg.user_home}:Z",
+            f"HOME={self.cfg.launch_dir}",
             "-v",
             self.cfg.project_mount,
+            *self._optional_host_root_args(),
             *self.nvidia_tool_mount_args,
             "-w",
             str(self.cfg.launch_dir),
@@ -955,6 +963,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--uid", type=int, help="UID for system Quadlet install via --install")
     parser.add_argument("--dir", type=Path, help="Project directory for system Quadlet install via --install")
     parser.add_argument(
+        "--host-root",
+        action="store_true",
+        help="Mount host root filesystem read-only at /host inside the container",
+    )
+    parser.add_argument(
         "--rebuild-image",
         action="store_true",
         help="Run podman build even when the image tag already exists (default skips build)",
@@ -1059,6 +1072,7 @@ def main() -> int:
         gid=gid,
         user_name=user_name,
         user_home=user_home,
+        mount_host_root=args.host_root,
         verbose=VERBOSE,
     )
     launcher = PodmanLauncher(cfg)
