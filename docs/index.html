@@ -2,11 +2,6 @@
 <!--
   podman-minimal — Copyright (C) 2026 Vincenzo Ciancia <vincenzoml@gmail.com>
   SPDX-License-Identifier: GPL-3.0-or-later
-
-  This program is free software: you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation, either version 3 of the License, or
-  (at your option) any later version.  See LICENSE in the repository.
 -->
 <html lang="en">
 <head>
@@ -14,169 +9,185 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="author" content="Vincenzo Ciancia &lt;vincenzoml@gmail.com&gt;" />
   <title>podman-minimal</title>
-  <meta name="description" content="Run clean Podman dev/runtime environments from any folder with one command." />
+  <meta name="description" content="One command to run Podman workloads: pick an image, GPU-ready when your host supports it." />
   <style>
     :root {
-      --bg: #0b1020;
-      --text: #e9ecf8;
-      --muted: #aab3d6;
-      --accent2: #49dcb1;
-      --border: #25305f;
+      --bg: #2c2c2e;
+      --text: #f5f5f7;
+      --muted: #98989d;
+      --line: #48484a;
+      --terminal-bg: #1c1c1e;
+      --prompt: #6e6e73;
+      --command: #f5f5f7;
+      --output-dim: #d1d1d6;
     }
     * { box-sizing: border-box; }
+    html { -webkit-font-smoothing: antialiased; }
     body {
       margin: 0;
-      font: 16px/1.55 Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      font: 17px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       color: var(--text);
-      background: radial-gradient(1200px 500px at 80% -10%, #243b8f 0%, transparent 60%), var(--bg);
+      background: var(--bg);
     }
-    .wrap { max-width: 920px; margin: 0 auto; padding: 40px 20px 64px; }
-    h1 { font-size: 42px; line-height: 1.05; margin: 0 0 10px; letter-spacing: -0.02em; }
-    .sub { color: var(--muted); margin: 0 0 24px; font-size: 18px; max-width: 62ch; }
-    .cta-box {
-      background: linear-gradient(180deg, #141c3c, #111833);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 20px 22px;
-      margin: 0 0 28px;
+    .wrap {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
     }
-    .cta-box p { margin: 0 0 14px; color: #d3daf8; font-size: 15px; line-height: 1.5; max-width: 65ch; }
-    .cta-box p:last-of-type { margin-bottom: 16px; }
-    .cta-btn {
-      display: inline-block;
-      padding: 11px 18px;
-      border-radius: 10px;
-      text-decoration: none;
-      color: #061027;
-      background: linear-gradient(90deg, var(--accent2), #86f7d5);
-      font-weight: 700;
-      font-size: 15px;
-    }
-    .cta-btn:hover { filter: brightness(1.06); }
-    .cta-actions {
+    header {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 10px 14px;
-      margin-top: 4px;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 40px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--line);
     }
-    .github-source {
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin: 0;
+    }
+    .nav {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .nav a {
+      color: var(--text);
+      text-decoration: none;
+      font-size: 0.875rem;
+    }
+    .nav a:hover { text-decoration: underline; text-underline-offset: 3px; }
+    .btn-star {
+      border: 1px solid var(--line);
+      padding: 8px 14px;
+      border-radius: 6px;
+      background: transparent;
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+    .btn-star:hover { background: rgba(255,255,255,0.06); }
+    .github-ic {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 44px;
-      height: 44px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      background: #0a122a;
+      width: 40px;
+      height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
       color: var(--text);
-      text-decoration: none;
-      transition: background 0.15s, border-color 0.15s;
     }
-    .github-source:hover { background: #141c3c; border-color: #5868a8; }
-    .github-source:focus-visible {
-      outline: 2px solid var(--accent2);
-      outline-offset: 2px;
+    .github-ic:hover { background: rgba(255,255,255,0.06); }
+    .github-ic svg { width: 22px; height: 22px; display: block; }
+    .issue { font-size: 0.8125rem; color: var(--muted); }
+    .issue:hover { color: var(--text); }
+
+    .lede {
+      margin: 0 0 28px;
+      font-size: 1.0625rem;
+      line-height: 1.55;
+      color: var(--text);
+      max-width: 52ch;
     }
-    .github-source svg { width: 24px; height: 24px; fill: currentColor; display: block; }
-    .cta-issue {
-      font-size: 13px;
-      font-weight: 500;
+
+    .terminal-wrap {
+      margin-bottom: 36px;
+    }
+    .terminal-cap {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
       color: var(--muted);
-      text-decoration: none;
-      border-bottom: 1px solid #4a5a8f;
-      padding-bottom: 1px;
+      margin-bottom: 10px;
     }
-    .cta-issue:hover { color: var(--text); border-bottom-color: #7c9cff; }
-    .cta-issue:focus-visible {
-      outline: 2px solid var(--accent2);
-      outline-offset: 3px;
-      border-radius: 2px;
-    }
-    .meta-link { margin-left: 14px; color: var(--text); font-size: 14px; text-decoration: none; border-bottom: 1px solid #5868a8; }
-    .card {
-      background: linear-gradient(180deg, #141c3c, #111833);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 16px 18px;
-      margin-bottom: 14px;
-    }
-    h2 { font-size: 21px; margin: 0 0 10px; }
-    h3 { font-size: 15px; margin: 16px 0 8px; color: #d3daf8; font-weight: 600; }
-    pre {
-      margin: 0;
-      background: #0a122a;
-      border: 1px solid #26356e;
-      color: #d4ddff;
-      border-radius: 10px;
-      padding: 11px;
+    .terminal {
+      background: var(--terminal-bg);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px 20px;
+      font-family: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+      font-size: 0.8125rem;
+      line-height: 1.65;
       overflow-x: auto;
-      font-size: 13px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
-    ul { margin: 8px 0 0 20px; padding: 0; color: var(--muted); }
-    .foot { margin-top: 28px; color: var(--muted); font-size: 14px; max-width: 60ch; }
-    code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.92em; }
+    .terminal .prompt { color: var(--prompt); user-select: none; }
+    .terminal .cmd { color: var(--command); white-space: pre-wrap; word-break: break-all; }
+    .terminal .out { color: var(--output-dim); margin-top: 12px; white-space: pre-wrap; }
+    .terminal-note {
+      margin-top: 12px;
+      font-size: 0.8125rem;
+      color: var(--muted);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+
+    .install {
+      margin-bottom: 48px;
+    }
+    .install h2 {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 0 0 10px;
+    }
+    .install pre {
+      margin: 0;
+      padding: 16px 18px;
+      background: var(--terminal-bg);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 0.75rem;
+      line-height: 1.55;
+      overflow-x: auto;
+      color: var(--output-dim);
+    }
+
+    .foot {
+      font-size: 0.8125rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .foot a { color: var(--muted); }
+    .foot a:hover { color: var(--text); }
   </style>
 </head>
 <body>
   <main class="wrap">
-    <h1>podman-minimal</h1>
-    <p class="sub">Run clean Podman dev/runtime environments from any folder with one command. Normal runs are rootless: your tools live in containers, not on the host.</p>
-
-    <div class="cta-box">
-      <p><strong>Free software (GNU GPLv3 or later).</strong> This project is shared so you can run, study, change, and redistribute it under the terms of the GPL. The author is Vincenzo Ciancia.</p>
-      <p>If it saves you time or fits your workflow, starring the repo on GitHub is a small, free way to say thanks — it also helps other people discover the tool.</p>
-      <div class="cta-actions">
-        <a class="cta-btn" href="https://github.com/vincenzoml/podman-minimal">Star on GitHub</a>
-        <a class="github-source" href="https://github.com/vincenzoml/podman-minimal" title="Source" aria-label="View source on GitHub">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 98 96" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.362 0-1.141-.08-5.052-.08-9.127-13.59 2.934-16.422-5.867-16.422-5.867-2.184-5.704-5.42-7.17-5.42-7.17-4.448-3.015.324-3.015.324-3.015 4.934.326 7.523 5.052 7.523 5.052 4.367 7.496 11.404 5.378 14.235 4.074.404-3.178 1.699-5.378 3.074-6.6-10.839-1.225-22.23-5.475-22.23-24.525 0-5.378 1.94-9.778 5.014-13.2-.485-1.222-2.184-6.275.486-13.038 0 0 4.125-1.304 13.426 5.052a46.97 46.97 0 0 1 12.214-1.63c4.125 0 8.33.571 12.213 1.63 9.302-6.356 13.427-5.052 13.427-5.052 2.67 6.763.97 11.816.485 13.038 3.155 3.422 5.015 7.822 5.015 13.2 0 19.053-11.404 23.293-22.324 24.393 1.76 1.478 3.316 4.401 3.316 8.795 0 6.6-.08 11.897-.08 13.526 0 1.304.89 2.853 3.316 2.364 19.412-6.52 33.405-24.936 33.405-46.69C96.971 22 75.831 0 48.854 0z"/></svg>
+    <header>
+      <h1>podman-minimal</h1>
+      <nav class="nav" aria-label="Repository">
+        <a class="btn-star" href="https://github.com/vincenzoml/podman-minimal">Star</a>
+        <a class="github-ic" href="https://github.com/vincenzoml/podman-minimal" title="Source" aria-label="View source on GitHub">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 98 96" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.362 0-1.141-.08-5.052-.08-9.127-13.59 2.934-16.42-5.867-16.42-5.867-2.184-5.704-5.42-7.17-5.42-7.17-4.448-3.015.324-3.015.324-3.015 4.934.326 7.523 5.052 7.523 5.052 4.367 7.496 11.404 5.378 14.235 4.074.404-3.178 1.699-5.378 3.074-6.6-10.839-1.225-22.23-5.475-22.23-24.525 0-5.378 1.94-9.778 5.014-13.2-.485-1.222-2.184-6.275.486-13.038 0 0 4.125-1.304 13.426 5.052a46.97 46.97 0 0 1 12.214-1.63c4.125 0 8.33.571 12.213 1.63 9.302-6.356 13.427-5.052 13.427-5.052 2.67 6.763.97 11.816.485 13.038 3.155 3.422 5.015 7.822 5.015 13.2 0 19.053-11.404 23.293-22.324 24.393 1.76 1.478 3.316 4.401 3.316 8.795 0 6.6-.08 11.897-.08 13.526 0 1.304.89 2.853 3.316 2.364 19.412-6.52 33.405-24.936 33.405-46.69C96.971 22 75.831 0 48.854 0z"/></svg>
         </a>
-        <a class="cta-issue" href="https://github.com/vincenzoml/podman-minimal/issues/new">Report an issue</a>
+        <a class="issue" href="https://github.com/vincenzoml/podman-minimal/issues/new">Report issue</a>
+      </nav>
+    </header>
+
+    <p class="lede">One command runs the container. You choose the image; on a typical Linux machine with NVIDIA, the GPU is wired in for you.</p>
+
+    <div class="terminal-wrap">
+      <p class="terminal-cap">Example</p>
+      <div class="terminal">
+        <span class="prompt">$ </span><span class="cmd">podman-minimal --image docker.io/nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi -L</span>
+        <div class="out">GPU 0: NVIDIA GeForce RTX 5080 (UUID: GPU-e611ee94-8aa1-ec0c-cf66-dfb053851429)</div>
+        <p class="terminal-note">Output captured on a Linux host with rootless Podman and an NVIDIA GPU. Your line will match your hardware; without a GPU the same command still runs the image, but <code>nvidia-smi</code> may be empty or fail inside the container.</p>
       </div>
     </div>
 
-    <section class="card">
-      <h2>Install in one line</h2>
-      <h3>Linux / macOS</h3>
-      <pre><code>python3 -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/vincenzoml/podman-minimal/main/podman-minimal.py').read().decode())" --install</code></pre>
-      <h3>Windows (PowerShell)</h3>
-      <pre><code>python -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/vincenzoml/podman-minimal/main/podman-minimal.py').read().decode())" --install</code></pre>
-      <p style="margin:14px 0 0; color:var(--muted); font-size:14px;">Install under <code>~/.local/bin</code> if you want to avoid privilege prompts — see the README on GitHub.</p>
+    <section class="install">
+      <h2>Install</h2>
+      <pre>python3 -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/vincenzoml/podman-minimal/main/podman-minimal.py').read().decode())" --install</pre>
+      <p class="terminal-note" style="margin-top:10px;margin-bottom:0">Windows: use <code>python</code> instead of <code>python3</code>. Docs: <a href="https://github.com/vincenzoml/podman-minimal/blob/main/README.md">README</a>.</p>
     </section>
 
-    <section class="card">
-      <h2>Everyday commands</h2>
-      <pre><code>podman-minimal
-podman-minimal nvidia-smi
-podman-minimal -v -- python3 -c "print('verbose + image info')"
-podman-minimal --nohup run.log -- python3 -m http.server 8080
-podman-minimal --dockerfile /path/to/Dockerfile
-podman-minimal --help</code></pre>
-    </section>
-
-    <section class="card">
-      <h2>Behavior</h2>
-      <ul>
-        <li><strong>Quiet by default</strong> — only Podman and your command speak unless you pass <code>-v</code> / <code>--verbose</code>.</li>
-        <li><strong><code>--nohup</code></strong> — detached run, log file, live copy to the terminal while it stays open.</li>
-        <li><strong>Sudo</strong> — not used for normal runs. Used only when installing the binary to a protected path, auto-installing Podman on Linux, optional daemon linger, or optional system Quadlet. Set <code>PODMAN_MINIMAL_NO_SUDO=1</code> to forbid <code>sudo</code> from this script entirely.</li>
-        <li><strong>Linux</strong> — package-manager Podman install. <strong>macOS</strong> — Homebrew + <code>brew install podman</code>. <strong>Windows</strong> — <code>winget</code> or <code>choco</code>.</li>
-        <li><strong>Daemon / Quadlet</strong> — advanced flows documented in the README (Linux).</li>
-      </ul>
-    </section>
-
-    <section class="card">
-      <h2>Use cases</h2>
-      <ul>
-        <li>Interactive shell without polluting the host.</li>
-        <li>One-shot commands and CI-like local runs.</li>
-        <li>Per-repo workflow with <code>podman-minimal.py</code> in the tree.</li>
-        <li>Long-running jobs via <code>--nohup</code> or user daemon on Linux.</li>
-      </ul>
-    </section>
-
-    <p class="foot">© 2026 Vincenzo Ciancia &lt;<a href="mailto:vincenzoml@gmail.com" style="color:var(--muted)">vincenzoml@gmail.com</a>&gt;. Licensed under <a class="meta-link" href="https://github.com/vincenzoml/podman-minimal/blob/main/LICENSE" style="margin-left:0">GNU GPLv3 or later</a>. Full reference: <a class="meta-link" href="https://github.com/vincenzoml/podman-minimal/blob/main/README.md" style="margin-left:0">README on GitHub</a>. If the project helps you, consider starring it — it costs nothing and means a lot.</p>
+    <p class="foot">© 2026 Vincenzo Ciancia · GPLv3+ · <a href="mailto:vincenzoml@gmail.com">vincenzoml@gmail.com</a></p>
   </main>
 </body>
 </html>
