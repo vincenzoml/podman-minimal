@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import re
+from urllib.request import urlopen
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List
@@ -21,6 +22,7 @@ DEFAULT_IMAGE = "docker.io/nvidia/cuda:12.4.1-base-ubuntu22.04"
 DEFAULT_PORT = 18080
 INSTALL_TARGET = "/usr/local/bin/podman-minimal"
 SYSTEM_OCI_DIR = "/etc/containers/systemd"
+RAW_START_PY_URL = "https://raw.githubusercontent.com/vincenzoml/podman-minimal/main/start.py"
 
 
 def run(cmd: List[str], check: bool = True) -> subprocess.CompletedProcess:
@@ -38,15 +40,23 @@ def ensure_command_exists(name: str) -> None:
 
 
 def install_self(target_path: str = INSTALL_TARGET) -> None:
-    src = Path(__file__).resolve()
+    script_file = globals().get("__file__")
+    script_path = Path(script_file).resolve() if script_file else None
+    if script_path is not None and script_path.exists() and script_path.name != "<stdin>":
+        script_bytes = script_path.read_bytes()
+    else:
+        script_bytes = urlopen(RAW_START_PY_URL).read()
     target = Path(target_path)
     if os.geteuid() == 0:
-        target.write_bytes(src.read_bytes())
+        target.write_bytes(script_bytes)
         os.chmod(target, 0o755)
     else:
         ensure_command_exists("sudo")
-        run(["sudo", "cp", str(src), str(target)])
+        tmp_src = Path("/tmp/podman-minimal.start.py")
+        tmp_src.write_bytes(script_bytes)
+        run(["sudo", "cp", str(tmp_src), str(target)])
         run(["sudo", "chmod", "755", str(target)])
+        run(["rm", "-f", str(tmp_src)])
     print(f"Installed launcher: {target}")
     print(f"Run it from anywhere with: {target.name}")
 
@@ -572,7 +582,8 @@ def main() -> int:
     user_home = Path(f"/home/{user_name}")
     container_name = args.name or f"ubuntu-{user_name}"
     container_port = args.container_port if args.container_port is not None else args.port
-    check_setup_prompt(Path(sys.argv[0]).name, auto_install=True)
+    if not args.install:
+        check_setup_prompt(Path(sys.argv[0]).name, auto_install=True)
 
     if args.image_file:
         args.image = resolve_image_from_file(args.image_file.resolve())
