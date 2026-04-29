@@ -175,6 +175,27 @@
       color: var(--charcoal);
       box-shadow: 0 10px 40px rgba(0,0,0,0.04);
     }
+    .os-switch {
+      display: inline-flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin: 0 0 12px;
+    }
+    .os-btn {
+      border: 1px solid var(--soft);
+      background: #fff;
+      color: var(--charcoal);
+      border-radius: 999px;
+      padding: 6px 11px;
+      font-size: 0.74rem;
+      font-weight: 620;
+      cursor: pointer;
+    }
+    .os-btn[aria-pressed="true"] {
+      background: var(--charcoal);
+      color: #fff;
+      border-color: var(--charcoal);
+    }
     .install-bar {
       display: flex;
       align-items: center;
@@ -322,8 +343,14 @@
         <h2>Install</h2>
         <button class="copy-btn" id="copy-install" type="button">Copy</button>
       </div>
+      <div class="os-switch" role="group" aria-label="Operating system switcher">
+        <button class="os-btn" type="button" data-os="auto" aria-pressed="true">Auto</button>
+        <button class="os-btn" type="button" data-os="linux" aria-pressed="false">Linux</button>
+        <button class="os-btn" type="button" data-os="macos" aria-pressed="false">macOS</button>
+        <button class="os-btn" type="button" data-os="windows" aria-pressed="false">Windows</button>
+      </div>
       <pre id="install-cmd">python3 -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/vincenzoml/podman-minimal/refs/heads/main/podman-minimal.py').read().decode())" --install</pre>
-      <p class="terminal-note" style="margin-top:10px;margin-bottom:0">Windows: use <code>python</code> instead of <code>python3</code>. Docs: <a href="https://github.com/vincenzoml/podman-minimal/blob/main/README.md">README</a>.</p>
+      <p class="terminal-note" id="install-note" style="margin-top:10px;margin-bottom:0">Auto mode detects your OS. Docs: <a href="https://github.com/vincenzoml/podman-minimal/blob/main/README.md">README</a>.</p>
     </section>
 
     <section class="uses" aria-label="Use cases">
@@ -363,9 +390,29 @@
     (() => {
       const btn = document.getElementById("copy-install");
       const cmd = document.getElementById("install-cmd");
-      if (!btn || !cmd || !navigator.clipboard) return;
-      const text = cmd.textContent || "";
+      const note = document.getElementById("install-note");
+      const osButtons = Array.from(document.querySelectorAll(".os-btn"));
+      if (!btn || !cmd || !note) return;
+      const rawUrl = "https://raw.githubusercontent.com/vincenzoml/podman-minimal/refs/heads/main/podman-minimal.py";
+      const render = (osChoice) => {
+        const ua = navigator.userAgent.toLowerCase();
+        const osDetected = ua.includes("windows") ? "windows" : (ua.includes("mac os") || ua.includes("macintosh")) ? "macos" : "linux";
+        const os = osChoice === "auto" ? osDetected : osChoice;
+        const py = os === "windows" ? "python" : "python3";
+        cmd.textContent = `${py} -c "import urllib.request as u; exec(u.urlopen('${rawUrl}').read().decode())" --install`;
+        note.innerHTML = osChoice === "auto"
+          ? `Auto mode detected <code>${osDetected}</code>. Docs: <a href="https://github.com/vincenzoml/podman-minimal/blob/main/README.md">README</a>.`
+          : `Selected <code>${os}</code>. Docs: <a href="https://github.com/vincenzoml/podman-minimal/blob/main/README.md">README</a>.`;
+        osButtons.forEach((b) => b.setAttribute("aria-pressed", b.dataset.os === osChoice ? "true" : "false"));
+      };
+      render("auto");
+      osButtons.forEach((osBtn) => {
+        osBtn.addEventListener("click", () => render(osBtn.dataset.os || "auto"));
+      });
+
+      if (!navigator.clipboard) return;
       btn.addEventListener("click", async () => {
+        const text = cmd.textContent || "";
         try {
           await navigator.clipboard.writeText(text);
           const old = btn.textContent;
