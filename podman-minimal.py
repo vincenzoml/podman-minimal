@@ -413,6 +413,27 @@ def install_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
     infoprint(f"Run it from anywhere with: {target.name}")
 
 
+def resolve_build_id() -> str:
+    env_sha = os.environ.get("PODMAN_MINIMAL_COMMIT", "").strip()
+    if env_sha:
+        return env_sha
+    script_path = resolve_running_script_path()
+    if script_path is None:
+        return "unknown"
+    repo_dir = script_path.parent
+    proc = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],
+        check=False,
+        text=True,
+        capture_output=True,
+        cwd=str(repo_dir),
+    )
+    sha = proc.stdout.strip()
+    if sha and proc.returncode == 0:
+        return sha
+    return "unknown"
+
+
 def uninstall_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
     target_parent = Path(target_dir).expanduser()
     if host_os() == "windows":
@@ -1171,6 +1192,7 @@ def main() -> int:
         return 0
 
     if args.install:
+        infoprint(f"{COMMAND_NAME} {VERSION} (commit: {resolve_build_id()})")
         if args.uid is not None or args.dir is not None:
             if args.uid is None or args.dir is None:
                 raise RuntimeError("--install system setup requires both --uid and --dir")
