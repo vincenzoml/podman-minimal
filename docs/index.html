@@ -105,7 +105,7 @@
     .hero h2 {
       margin: 0;
       color: var(--charcoal);
-      font-size: clamp(3.2rem, 9vw, 7.2rem);
+      font-size: clamp(2.6rem, 7.2vw, 5.6rem);
       line-height: 0.9;
       letter-spacing: -0.075em;
       font-weight: 760;
@@ -229,6 +229,27 @@
       font-size: 0.92rem;
       font-weight: 720;
     }
+    .diff {
+      margin: 0 0 58px;
+      padding: 24px;
+      border: 1px solid var(--soft);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.82);
+      box-shadow: 0 10px 34px rgba(0,0,0,0.03);
+    }
+    .diff h3 {
+      margin: 0 0 10px;
+      color: var(--charcoal);
+      font-size: 1.1rem;
+      letter-spacing: -0.02em;
+    }
+    .diff ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+    .diff li + li { margin-top: 4px; }
 
     .foot {
       display: flex;
@@ -296,6 +317,16 @@
         <h3>Persistent work</h3>
         <p>Use <code>--nohup</code> for terminal-proof jobs or Linux user services for daemons.</p>
       </div>
+    </section>
+
+    <section class="diff" aria-label="Difference from plain podman">
+      <h3>Why not plain <code>podman run</code>?</h3>
+      <ul>
+        <li>No-hassle bootstrap: one command installs the launcher and prepares Podman across Linux, macOS, and Windows.</li>
+        <li>Automatic image workflow: detects Dockerfiles, builds/reuses tagged images, or pulls when needed.</li>
+        <li>VS Code-friendly defaults: handles `.devcontainer` / `.devcontainers` Dockerfile locations and correct build context automatically.</li>
+        <li>Built-in quality-of-life modes: quiet by default, optional verbose diagnostics, detached `--nohup`, and Linux daemon helpers.</li>
+      </ul>
     </section>
 
     <section class="star-panel">
