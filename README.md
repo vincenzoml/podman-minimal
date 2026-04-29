@@ -2,17 +2,15 @@
 
 Minimal launcher for rootless Podman with automatic GPU detection.
 
-Only `python3` is required. `podman` is auto-installed when missing.
+Only `python3` is required. `podman` is auto-installed when missing. 
 
 The only system-wide file installed is the command binary (default: `/usr/local/bin/podman-minimal`).
+
+To install run this:
 
 ```bash
 python3 -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/vincenzoml/podman-minimal/main/podman-minimal.py').read().decode())" --install
 ```
-
-## Prerequisites
-
-- `python3`
 
 ## Minimal usage
 
