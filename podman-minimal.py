@@ -776,11 +776,6 @@ class RuntimeConfig:
     def host_root_mount(self) -> str:
         return "/:/host:ro"
 
-    @property
-    def container_shell(self) -> str:
-        # `sh` is more universally available across container variants than `bash`.
-        return "sh"
-
 
 class PodmanLauncher:
     def __init__(self, cfg: RuntimeConfig) -> None:
@@ -856,7 +851,7 @@ class PodmanLauncher:
             self.cfg.container_workdir,
             *self.gpu_args,
             self.cfg.image,
-            self.cfg.container_shell,
+            "bash",
         ]
         vprint(f"Starting interactive shell in {self.cfg.image}")
         if host_os() == "windows":
