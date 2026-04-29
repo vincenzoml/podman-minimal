@@ -40,6 +40,14 @@ podman-minimal --nohup run.log -- python3 -m http.server 8080
 
 Default output is quiet: only Podman and your command speak. Use `-v` / `--verbose` for launcher details (version, image, Dockerfile, build context).
 
+## Why not plain podman run?
+
+- No-hassle bootstrap on Linux, macOS, and Windows.
+- Runs with your same UID/GID (`keep-id`) and mounts your current working directory by default.
+- Auto Dockerfile workflow: discover/build/reuse/pull without repeating boilerplate flags.
+- VS Code-compatible devcontainer handling (`.devcontainer` / `.devcontainers` context behavior).
+- Built-in convenience modes: `--nohup`, daemon helpers (Linux), quiet/verbose.
+
 ## Lifecycle
 
 ```bash
