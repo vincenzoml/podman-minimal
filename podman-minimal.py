@@ -51,11 +51,14 @@ DEFAULT_PORT = 18080
 VERSION = "1.0"
 def compute_default_install_dir() -> str:
     if platform.system().lower() == "windows":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        app_data = os.environ.get("APPDATA")
+        preferred_roots = [p.lower() for p in (local_app_data, app_data) if p]
         path_entries = [p.strip() for p in os.environ.get("PATH", "").split(os.pathsep) if p.strip()]
-        home = str(Path.home()).lower()
         for entry in path_entries:
             entry_path = Path(entry).expanduser()
-            if not str(entry_path).lower().startswith(home):
+            entry_norm = str(entry_path).lower()
+            if preferred_roots and not any(entry_norm.startswith(root) for root in preferred_roots):
                 continue
             if not entry_path.exists() or not entry_path.is_dir():
                 continue
@@ -68,7 +71,6 @@ def compute_default_install_dir() -> str:
         scripts_dir = sysconfig.get_path("scripts")
         if scripts_dir:
             return scripts_dir
-        local_app_data = os.environ.get("LOCALAPPDATA")
         if local_app_data:
             return str(Path(local_app_data) / "Programs" / "Python" / "Scripts")
         return str(Path.home() / "AppData" / "Local" / "Programs" / "Python" / "Scripts")
