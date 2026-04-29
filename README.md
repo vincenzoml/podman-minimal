@@ -5,7 +5,10 @@ Run clean Podman dev/runtime environments from any folder with one command. Root
 [GitHub repository](https://github.com/vincenzoml/podman-minimal)  
 [Project website (GitHub Pages)](https://vincenzoml.github.io/podman-minimal/)
 
-**This project is free to use.** If it helps you, a ⭐ star on GitHub is a simple way to show appreciation and helps others find it.
+**Author:** Vincenzo Ciancia ([vincenzoml@gmail.com](mailto:vincenzoml@gmail.com))  
+**Copyright © 2026 Vincenzo Ciancia.** Licensed under the [GNU General Public License v3.0 or later](LICENSE) (GPLv3+).
+
+**This project is free software.** If it helps you, a ⭐ star on GitHub is a simple way to show appreciation and helps others find it.
 
 ---
 
@@ -183,3 +186,13 @@ Run `podman-minimal --help` for the full list.
 - **Batch** one-off commands in the same image/work tree.
 - **Per-repo workflow** by keeping `podman-minimal.py` in the project.
 - **Long-running jobs** with `--nohup` (any OS) or `--daemon-install` (Linux).
+
+---
+
+## License
+
+Copyright © 2026 [Vincenzo Ciancia](mailto:vincenzoml@gmail.com).
+
+This program is free software: you can redistribute it and/or modify it under the terms of the **GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version**.
+
+See the [`LICENSE`](LICENSE) file for the full GPLv3 text.

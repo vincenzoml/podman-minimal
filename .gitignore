@@ -1,3 +1,8 @@
+# Copyright (C) 2026 Vincenzo Ciancia <vincenzoml@gmail.com>
+#
+# This file is part of podman-minimal, licensed under GNU GPL v3 or later.
+# See LICENSE in this repository for the full license text.
+
 __pycache__/
 *.pyc
 .env
