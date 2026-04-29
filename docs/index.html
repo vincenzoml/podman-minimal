@@ -400,7 +400,7 @@
         const py = os === "windows" ? "py" : "python3";
         cmd.textContent = `${py} -c "import urllib.request as u; exec(u.urlopen('${rawUrl}').read().decode())" --install`;
         if (os === "windows") {
-          note.innerHTML = `Windows: if <code>py</code> is missing, install Python first (Microsoft Store is fine), then run again. Docs: <a href="https://github.com/vincenzoml/podman-minimal/blob/main/README.md">README</a>.`;
+          note.innerHTML = `Windows: if <code>py</code> is missing, install Python first (Microsoft Store is fine), then run again. The installer places a <code>.cmd</code> launcher and updates user <code>PATH</code> if needed. Docs: <a href="https://github.com/vincenzoml/podman-minimal/blob/main/README.md">README</a>.`;
         } else {
           note.innerHTML = osChoice === "auto"
             ? `Auto mode detected <code>${osDetected}</code>. Docs: <a href="https://github.com/vincenzoml/podman-minimal/blob/main/README.md">README</a>.`

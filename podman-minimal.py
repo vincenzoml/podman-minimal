@@ -40,6 +40,10 @@ try:
 except ImportError:
     pwd = None
     grp = None
+try:
+    import winreg
+except ImportError:
+    winreg = None
 
 
 DEFAULT_IMAGE = "docker.io/library/ubuntu:26.04"
@@ -47,6 +51,20 @@ DEFAULT_PORT = 18080
 VERSION = "1.0"
 def compute_default_install_dir() -> str:
     if platform.system().lower() == "windows":
+        path_entries = [p.strip() for p in os.environ.get("PATH", "").split(os.pathsep) if p.strip()]
+        home = str(Path.home()).lower()
+        for entry in path_entries:
+            entry_path = Path(entry).expanduser()
+            if not str(entry_path).lower().startswith(home):
+                continue
+            if not entry_path.exists() or not entry_path.is_dir():
+                continue
+            try:
+                with tempfile.NamedTemporaryFile(dir=str(entry_path), delete=True):
+                    pass
+                return str(entry_path)
+            except OSError:
+                continue
         scripts_dir = sysconfig.get_path("scripts")
         if scripts_dir:
             return scripts_dir
@@ -332,10 +350,14 @@ def install_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
         )
         atomic_write_text(target_cmd, cmd_text)
         infoprint(f"Installed launcher: {target_cmd}")
-        path_entries = [p.strip().lower() for p in os.environ.get("PATH", "").split(os.pathsep) if p.strip()]
-        if str(target_parent).lower() not in path_entries:
-            infoprint(f"Note: add this directory to PATH to run `{COMMAND_NAME}` directly: {target_parent}")
-            infoprint(f"Current session (PowerShell): $env:Path += ';{target_parent}'")
+        if not windows_user_path_contains(target_parent):
+            changed = ensure_windows_user_path(target_parent)
+            if changed:
+                infoprint(f"Added to user PATH: {target_parent}")
+                infoprint("Open a new terminal to pick up updated PATH.")
+            else:
+                infoprint(f"Note: add this directory to PATH to run `{COMMAND_NAME}` directly: {target_parent}")
+                infoprint(f"Current session (PowerShell): $env:Path += ';{target_parent}'")
         infoprint(f"Run it from anywhere with: {COMMAND_NAME}")
         return
 
@@ -457,6 +479,32 @@ def check_setup_prompt(script_invocation: str) -> None:
     vprint("Run once with automatic setup:")
     vprint(f"  {script_invocation} --install")
     vprint("")
+
+
+def windows_user_path_contains(path_value: Path) -> bool:
+    target = str(path_value).strip().lower().rstrip("\\/")
+    for entry in [p.strip() for p in os.environ.get("PATH", "").split(os.pathsep) if p.strip()]:
+        if entry.lower().rstrip("\\/") == target:
+            return True
+    return False
+
+
+def ensure_windows_user_path(path_value: Path) -> bool:
+    if host_os() != "windows" or winreg is None:
+        return False
+    target = str(path_value)
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment", 0, winreg.KEY_READ | winreg.KEY_SET_VALUE) as key:
+        try:
+            current, _reg_type = winreg.QueryValueEx(key, "Path")
+        except FileNotFoundError:
+            current = ""
+        entries = [p.strip() for p in str(current).split(";") if p.strip()]
+        normalized = {p.lower().rstrip("\\/") for p in entries}
+        if target.lower().rstrip("\\/") in normalized:
+            return False
+        new_value = ";".join(entries + [target]) if entries else target
+        winreg.SetValueEx(key, "Path", 0, winreg.REG_EXPAND_SZ, new_value)
+    return True
 
 
 def ensure_user_linger(user_name: str) -> None:
