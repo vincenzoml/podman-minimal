@@ -5,21 +5,29 @@ from __future__ import annotations
 
 import argparse
 import os
-import pwd
-import grp
 import shlex
 import shutil
 import subprocess
 import sys
 import re
+import tempfile
+import platform
 from urllib.request import urlopen
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
+try:
+    import pwd
+    import grp
+except ImportError:
+    pwd = None
+    grp = None
+
 
 DEFAULT_IMAGE = "docker.io/nvidia/cuda:12.4.1-base-ubuntu22.04"
 DEFAULT_PORT = 18080
+VERSION = "0.9"
 DEFAULT_INSTALL_DIR = "/usr/local/bin"
 COMMAND_NAME = "podman-minimal"
 SYSTEM_OCI_DIR = "/etc/containers/systemd"
@@ -40,32 +48,73 @@ def ensure_command_exists(name: str) -> None:
         raise RuntimeError(f"Required command not found: {name}")
 
 
+def host_os() -> str:
+    name = platform.system().lower()
+    if name == "darwin":
+        return "macos"
+    if name == "windows":
+        return "windows"
+    return "linux"
+
+
+def install_homebrew_if_missing() -> None:
+    if shutil.which("brew"):
+        return
+    print("Homebrew not found; installing Homebrew first...")
+    run(
+        [
+            "/bin/bash",
+            "-c",
+            "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)",
+        ]
+    )
+
+
 def install_podman_if_missing() -> None:
     if shutil.which("podman") is not None:
         return
-    ensure_command_exists("sudo")
-    installers: List[List[str]] = []
-    if shutil.which("apt-get"):
-        installers = [
-            ["sudo", "apt-get", "update"],
-            ["sudo", "apt-get", "install", "-y", "podman"],
-        ]
-    elif shutil.which("dnf"):
-        installers = [["sudo", "dnf", "install", "-y", "podman"]]
-    elif shutil.which("yum"):
-        installers = [["sudo", "yum", "install", "-y", "podman"]]
-    elif shutil.which("zypper"):
-        installers = [["sudo", "zypper", "--non-interactive", "install", "podman"]]
-    elif shutil.which("pacman"):
-        installers = [["sudo", "pacman", "-S", "--noconfirm", "podman"]]
-    if not installers:
-        raise RuntimeError(
-            "Podman is missing and no supported package manager was detected "
-            "(supported: apt-get, dnf, yum, zypper, pacman)."
-        )
-    print("Podman not found; attempting automatic install (sudo may prompt)...")
-    for cmd in installers:
-        run(cmd)
+    os_name = host_os()
+    print("Podman not found; attempting automatic install...")
+    if os_name == "linux":
+        ensure_command_exists("sudo")
+        installers: List[List[str]] = []
+        if shutil.which("apt-get"):
+            installers = [
+                ["sudo", "apt-get", "update"],
+                ["sudo", "apt-get", "install", "-y", "podman"],
+            ]
+        elif shutil.which("dnf"):
+            installers = [["sudo", "dnf", "install", "-y", "podman"]]
+        elif shutil.which("yum"):
+            installers = [["sudo", "yum", "install", "-y", "podman"]]
+        elif shutil.which("zypper"):
+            installers = [["sudo", "zypper", "--non-interactive", "install", "podman"]]
+        elif shutil.which("pacman"):
+            installers = [["sudo", "pacman", "-S", "--noconfirm", "podman"]]
+        if not installers:
+            raise RuntimeError(
+                "Podman is missing and no supported Linux package manager was detected "
+                "(supported: apt-get, dnf, yum, zypper, pacman)."
+            )
+        for cmd in installers:
+            run(cmd)
+    elif os_name == "macos":
+        install_homebrew_if_missing()
+        brew_bin = shutil.which("brew")
+        if not brew_bin:
+            raise RuntimeError("Homebrew installation did not succeed. Install Podman manually.")
+        run([brew_bin, "install", "podman"])
+    elif os_name == "windows":
+        if shutil.which("winget"):
+            run(["winget", "install", "-e", "--id", "RedHat.Podman"])
+        elif shutil.which("choco"):
+            run(["choco", "install", "-y", "podman"])
+        else:
+            raise RuntimeError(
+                "Podman is missing and neither winget nor choco were found. Install Podman manually."
+            )
+    else:
+        raise RuntimeError(f"Unsupported operating system: {os_name}")
     ensure_command_exists("podman")
     print("Podman installation completed.")
 
@@ -107,9 +156,44 @@ def uninstall_self(target_dir: str = DEFAULT_INSTALL_DIR) -> None:
     print(f"Removed launcher: {target}")
 
 
+def resolve_running_script_path() -> Path | None:
+    script_file = globals().get("__file__")
+    if not script_file:
+        return None
+    return Path(script_file).resolve()
+
+
+def update_self() -> None:
+    running_path = resolve_running_script_path()
+    if running_path is None or running_path.name != COMMAND_NAME:
+        raise RuntimeError(
+            "--update only works from an installed 'podman-minimal' command, "
+            "not from the repository script file."
+        )
+    script_bytes = urlopen(RAW_START_PY_URL).read()
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, dir=str(running_path.parent)) as tmp:
+            tmp.write(script_bytes)
+            tmp_path = Path(tmp.name)
+        os.chmod(tmp_path, 0o755)
+        os.replace(tmp_path, running_path)
+    except PermissionError:
+        ensure_command_exists("sudo")
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            tmp.write(script_bytes)
+            tmp_path = Path(tmp.name)
+        run(["sudo", "install", "-m", "755", str(tmp_path), str(running_path)])
+        run(["rm", "-f", str(tmp_path)])
+    print(f"Updated launcher in place: {running_path}")
+    print("Restart any running podman-minimal sessions to use the new version.")
+
+
 def check_setup_prompt(script_invocation: str, auto_install: bool) -> None:
     install_target = str(Path(DEFAULT_INSTALL_DIR) / COMMAND_NAME)
-    missing = [p for p in (install_target, SYSTEM_OCI_DIR) if not Path(p).exists()]
+    required_paths = [install_target]
+    if host_os() == "linux":
+        required_paths.append(SYSTEM_OCI_DIR)
+    missing = [p for p in required_paths if not Path(p).exists()]
     if not missing:
         return
     if auto_install and sys.stdin.isatty():
@@ -124,6 +208,8 @@ def check_setup_prompt(script_invocation: str, auto_install: bool) -> None:
 
 
 def ensure_user_linger(user_name: str) -> None:
+    if host_os() != "linux":
+        raise RuntimeError("--daemon-* features require Linux (systemd user services).")
     ensure_command_exists("loginctl")
     current = run_capture(["loginctl", "show-user", user_name, "-p", "Linger", "--value"], check=False)
     if current.strip().lower() == "yes":
@@ -515,6 +601,10 @@ def install_root_quadlet(
     host_port: int,
     container_port: int,
 ) -> None:
+    if host_os() != "linux":
+        raise RuntimeError("System Quadlet install via --install --uid/--dir requires Linux.")
+    if pwd is None or grp is None:
+        raise RuntimeError("Missing POSIX account modules required for Linux system setup.")
     if os.geteuid() != 0:
         raise RuntimeError("root-install mode requires sudo/root")
     pw = pwd.getpwuid(uid)
@@ -577,6 +667,8 @@ def install_root_quadlet(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Minimal Podman launcher")
+    parser.add_argument("--version", action="store_true", help="Print version and exit")
+    parser.add_argument("--update", action="store_true", help="Update installed command from main branch")
     parser.add_argument("--dockerfile", type=Path, help="Path to Dockerfile")
     parser.add_argument("--image", default=DEFAULT_IMAGE, help="Image name")
     parser.add_argument("--image-file", type=Path, help="OCI/docker archive to load via podman load")
@@ -630,17 +722,43 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    install_podman_if_missing()
     args = parse_args()
+    if args.version:
+        print(f"{COMMAND_NAME} {VERSION}")
+        return 0
 
+    if args.uninstall:
+        uninstall_self(args.uninstall)
+        return 0
+
+    if args.update:
+        update_self()
+        return 0
+
+    if args.install:
+        install_self(args.install)
+        if args.uid is not None or args.dir is not None:
+            if args.uid is None or args.dir is None:
+                raise RuntimeError("--install system setup requires both --uid and --dir")
+            install_root_quadlet(
+                project_dir=args.dir,
+                uid=args.uid,
+                image=args.image,
+                container_name=args.name or f"ubuntu-{os.environ.get('USER') or run_capture(['id', '-un'])}",
+                host_port=args.port,
+                container_port=args.container_port if args.container_port is not None else args.port,
+            )
+        return 0
+
+    install_podman_if_missing()
     launch_dir = Path.cwd()
-    user_name = os.environ.get("USER") or run_capture(["id", "-un"])
-    uid = os.getuid()
-    gid = os.getgid()
-    user_home = Path(f"/home/{user_name}")
+    user_name = os.environ.get("USER") or os.environ.get("USERNAME") or run_capture(["id", "-un"])
+    uid = os.getuid() if hasattr(os, "getuid") else 1000
+    gid = os.getgid() if hasattr(os, "getgid") else 1000
+    user_home = Path.home()
     container_name = args.name or f"ubuntu-{user_name}"
     container_port = args.container_port if args.container_port is not None else args.port
-    if not args.install and not args.uninstall:
+    if not args.install and not args.uninstall and not args.update:
         check_setup_prompt(Path(sys.argv[0]).name, auto_install=True)
 
     if args.image_file:
@@ -654,32 +772,19 @@ def main() -> int:
         args.init_devcontainer,
         bool(args.install),
         bool(args.uninstall),
+        args.update,
     ]
     if sum(1 for x in action_flags if x) > 1:
         raise RuntimeError("Choose only one action flag at a time")
 
-    if args.uninstall:
-        uninstall_self(args.uninstall)
-        return 0
-
-    if args.install:
-        install_self(args.install)
-        if args.uid is not None or args.dir is not None:
-            if args.uid is None or args.dir is None:
-                raise RuntimeError("--install system setup requires both --uid and --dir")
-            install_root_quadlet(
-                project_dir=args.dir,
-                uid=args.uid,
-                image=args.image,
-                container_name=container_name,
-                host_port=args.port,
-                container_port=container_port,
-            )
-        return 0
-
     if args.init_devcontainer:
         init_devcontainer(launch_dir)
         return 0
+
+    if host_os() != "linux" and (
+        args.daemon_install or args.daemon_remove or args.daemon_status or args.daemon_logs
+    ):
+        raise RuntimeError("--daemon-* features are currently Linux-only.")
 
     cfg = RuntimeConfig(
         launch_dir=launch_dir,
