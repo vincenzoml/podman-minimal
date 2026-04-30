@@ -47,7 +47,7 @@ except ImportError:
 
 DEFAULT_IMAGE = "docker.io/library/ubuntu:26.04"
 DEFAULT_PORT = 18080
-VERSION = "1.0"
+VERSION = "1.0.0"
 def compute_default_install_dir() -> str:
     if platform.system().lower() == "windows":
         local_app_data = os.environ.get("LOCALAPPDATA")

@@ -8,8 +8,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="author" content="Vincenzo Ciancia &lt;vincenzoml@gmail.com&gt;" />
-  <title>podman-minimal</title>
-  <meta name="description" content="A tiny command for clean, reproducible Podman environments." />
+  <title>podman-minimal - clean throwaway Podman environments</title>
+  <meta name="description" content="Minimal Podman launcher for clean throwaway dev environments from any folder, with Dockerfile/devcontainer autodiscovery and safe current-directory mounting." />
   <style>
     :root {
       --paper: #fafafa;
@@ -324,8 +324,8 @@
     </header>
 
     <section class="hero">
-      <h2>Clean machines. One command.</h2>
-      <p class="lede">Launch a disposable, project-mounted Podman environment from the folder you are already in. Pick an image or Dockerfile; GPU access is detected when your host supports it.</p>
+      <h2>Clean environments. One command.</h2>
+      <p class="lede">Launch a disposable Podman shell from the folder you are already in. Current directory is mounted by default, your UID/GID is preserved, and Dockerfile/devcontainer layouts are auto-discovered.</p>
     </section>
 
     <div class="terminal-wrap">

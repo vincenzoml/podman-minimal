@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Validate tag matches script semver
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION_OUTPUT="$(python3 podman-minimal.py --version)"
+          SEMVER="$(printf '%s\n' "$VERSION_OUTPUT" | sed -nE 's/.*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p')"
+
+          if [[ -z "$SEMVER" ]]; then
+            echo "Could not extract semver from --version output: $VERSION_OUTPUT" >&2
+            exit 1
+          fi
+
+          if [[ ! "$SEMVER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Extracted version is not strict semver: $SEMVER" >&2
+            exit 1
+          fi
+
+          EXPECTED_TAG="v$SEMVER"
+          if [[ "$TAG" != "$EXPECTED_TAG" ]]; then
+            echo "Tag ($TAG) does not match script version tag ($EXPECTED_TAG)." >&2
+            exit 1
+          fi
+
+          {
+            echo "version=$SEMVER"
+            echo "tag=$TAG"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: v${{ steps.version.outputs.version }}
+          generate_release_notes: true

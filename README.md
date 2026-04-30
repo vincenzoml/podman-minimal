@@ -1,11 +1,19 @@
 # podman-minimal
 
-Run clean Podman environments from any folder.
+Minimal Podman launcher for clean throwaway dev environments from any folder.
 
 [Website](https://vincenzoml.github.io/podman-minimal/) · [Source](https://github.com/vincenzoml/podman-minimal) · [Issues](https://github.com/vincenzoml/podman-minimal/issues)
 
 **Author:** Vincenzo Ciancia ([vincenzoml@gmail.com](mailto:vincenzoml@gmail.com))  
 **License:** [GNU GPLv3 or later](LICENSE)
+
+## Quickstart
+
+```bash
+podman-minimal
+```
+
+From any project folder, this opens a clean disposable container shell with your current directory mounted and your host UID/GID preserved.
 
 ## Install
 
@@ -90,6 +98,18 @@ podman-minimal --image docker.io/library/rust:1.89 rustc --version
 - Auto Dockerfile workflow: discover/build/reuse/pull without repeating boilerplate flags.
 - VS Code-compatible devcontainer handling (`.devcontainer` / `.devcontainers` context behavior).
 - Built-in convenience modes: `--nohup`, daemon helpers (Linux), quiet/verbose.
+
+Instead of repeatedly writing:
+
+```bash
+podman run --rm -it -v "$PWD:/work" -w /work --userns=keep-id docker.io/library/ubuntu:26.04 bash
+```
+
+you can use:
+
+```bash
+podman-minimal
+```
 
 ## Mount behavior
 
