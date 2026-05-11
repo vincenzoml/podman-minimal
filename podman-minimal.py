@@ -839,13 +839,31 @@ class PodmanLauncher:
         os.execvp(args[0], args)
         return 0
 
-    def build_run_command_args(self, command: List[str]) -> List[str]:
+    def _podman_tty_forward_args(self, *, for_nohup: bool) -> List[str]:
+        """Forward host terminal to the container when appropriate.
+
+        - ``-i``: host stdin is a TTY (interactive stdin).
+        - ``-t``: host stdout is a TTY (pseudo-TTY; line-oriented output, sane signals).
+
+        Omit both for detached ``nohup`` runs (stdin/stdout redirected).
+        """
+        if for_nohup:
+            return []
+        flags: List[str] = []
+        if sys.stdin.isatty():
+            flags.append("-i")
+        if sys.stdout.isatty():
+            flags.append("-t")
+        return flags
+
+    def build_run_command_args(self, command: List[str], *, for_nohup: bool = False) -> List[str]:
         if not command:
             raise RuntimeError("No command provided for command mode")
         return [
             "podman",
             "run",
             "--rm",
+            *self._podman_tty_forward_args(for_nohup=for_nohup),
             *self._common_identity_args(),
             "-e",
             f"HOME={self.cfg.container_workdir}",
@@ -864,7 +882,7 @@ class PodmanLauncher:
         return run(args, check=False).returncode
 
     def nohup_command_mode(self, command: List[str], log_file: Path) -> int:
-        args = self.build_run_command_args(command)
+        args = self.build_run_command_args(command, for_nohup=True)
         log_file.parent.mkdir(parents=True, exist_ok=True)
         log_handle = log_file.open("a", encoding="utf-8")
         if host_os() == "windows":
