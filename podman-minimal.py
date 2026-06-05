@@ -733,6 +733,7 @@ class RuntimeConfig:
     run_as_root: bool
     verbose: bool
     env_vars: List[str]
+    shm_size: str | None
 
     @property
     def project_mount(self) -> str:
@@ -835,6 +836,7 @@ class PodmanLauncher:
             "-e",
             f"HOME={self.cfg.container_workdir}",
             *self._extra_env_args(),
+            *self._shm_args(),
             *self.cfg.project_mount_args,
             *self._optional_host_root_args(),
             *self.nvidia_tool_mount_args,
@@ -873,6 +875,11 @@ class PodmanLauncher:
             args += ["-e", kv]
         return args
 
+    def _shm_args(self) -> List[str]:
+        if self.cfg.shm_size:
+            return ["--shm-size", self.cfg.shm_size]
+        return []
+
     def build_run_command_args(self, command: List[str], *, for_nohup: bool = False) -> List[str]:
         if not command:
             raise RuntimeError("No command provided for command mode")
@@ -885,6 +892,7 @@ class PodmanLauncher:
             "-e",
             f"HOME={self.cfg.container_workdir}",
             *self._extra_env_args(),
+            *self._shm_args(),
             *self.cfg.project_mount_args,
             *self._optional_host_root_args(),
             *self.nvidia_tool_mount_args,
@@ -1189,6 +1197,13 @@ def parse_args() -> argparse.Namespace:
         help="Run podman build even when the image tag already exists (default skips build)",
     )
     parser.add_argument(
+        "--shm-size",
+        default=None,
+        metavar="SIZE",
+        help="Size of /dev/shm inside the container (e.g. 8g). "
+             "Increase for ML workloads that use shared-memory dataloaders.",
+    )
+    parser.add_argument(
         "-e", "--env",
         action="append",
         default=[],
@@ -1301,6 +1316,7 @@ def main() -> int:
         run_as_root=args.root,
         verbose=VERBOSE,
         env_vars=args.env_vars,
+        shm_size=args.shm_size,
     )
     launcher = PodmanLauncher(cfg)
     build_log = Path(args.nohup).expanduser() if args.nohup else None
