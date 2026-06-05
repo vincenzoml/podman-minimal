@@ -763,7 +763,7 @@ class PodmanLauncher:
         self.gpu_args = detect_gpu_args()
         self.nvidia_tool_mount_args = detect_nvidia_tool_mount_args(self.gpu_args)
 
-    def maybe_build(self) -> None:
+    def maybe_build(self, build_log_file: "Path | None" = None) -> None:
         if self.cfg.dockerfile is not None:
             dockerfile = self.cfg.dockerfile
         else:
@@ -780,14 +780,23 @@ class PodmanLauncher:
         ):
             vprint(f"Skipping build (image exists: {self.cfg.image}); use --rebuild-image to rebuild")
             return
-        if self.cfg.verbose:
-            vprint(f"Using Dockerfile: {dockerfile}")
-            vprint(f"Build context: {context}")
-        vprint(f"Building image from Dockerfile: {dockerfile}")
-        run(
-            ["podman", "build", "-f", str(dockerfile), "-t", self.cfg.image, str(context)],
-            quiet=not self.cfg.verbose,
-        )
+        vprint(f"Using Dockerfile: {dockerfile}")
+        vprint(f"Build context: {context}")
+        infoprint(f"Building image from Dockerfile: {dockerfile}")
+        cmd = ["podman", "build", "-f", str(dockerfile), "-t", self.cfg.image, str(context)]
+        if build_log_file is not None:
+            # In nohup mode: tee build output into the same log file so failures are diagnosable.
+            build_log_file.parent.mkdir(parents=True, exist_ok=True)
+            with build_log_file.open("a", encoding="utf-8", errors="replace") as lf:
+                lf.write(f"=== podman build started ===\n")
+                lf.flush()
+                proc = subprocess.run(cmd, stdout=lf, stderr=subprocess.STDOUT, text=True)
+                lf.write(f"=== podman build exit {proc.returncode} ===\n")
+            if proc.returncode != 0:
+                raise subprocess.CalledProcessError(proc.returncode, cmd)
+        else:
+            # Interactive: always stream build output so failures are immediately visible.
+            run(cmd)
 
     def ensure_image(self) -> None:
         image_exists = run(["podman", "image", "exists", self.cfg.image], check=False, quiet=True).returncode == 0
@@ -1276,7 +1285,8 @@ def main() -> int:
         verbose=VERBOSE,
     )
     launcher = PodmanLauncher(cfg)
-    launcher.maybe_build()
+    build_log = Path(args.nohup).expanduser() if args.nohup else None
+    launcher.maybe_build(build_log_file=build_log)
     launcher.ensure_image()
     vprint(f"Runtime image: {cfg.image}")
 
