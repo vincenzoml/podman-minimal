@@ -732,6 +732,7 @@ class RuntimeConfig:
     mount_host_root: bool
     run_as_root: bool
     verbose: bool
+    env_vars: List[str]
 
     @property
     def project_mount(self) -> str:
@@ -833,6 +834,7 @@ class PodmanLauncher:
             *self._common_identity_args(),
             "-e",
             f"HOME={self.cfg.container_workdir}",
+            *self._extra_env_args(),
             *self.cfg.project_mount_args,
             *self._optional_host_root_args(),
             *self.nvidia_tool_mount_args,
@@ -865,6 +867,12 @@ class PodmanLauncher:
             flags.append("-t")
         return flags
 
+    def _extra_env_args(self) -> List[str]:
+        args: List[str] = []
+        for kv in self.cfg.env_vars:
+            args += ["-e", kv]
+        return args
+
     def build_run_command_args(self, command: List[str], *, for_nohup: bool = False) -> List[str]:
         if not command:
             raise RuntimeError("No command provided for command mode")
@@ -876,6 +884,7 @@ class PodmanLauncher:
             *self._common_identity_args(),
             "-e",
             f"HOME={self.cfg.container_workdir}",
+            *self._extra_env_args(),
             *self.cfg.project_mount_args,
             *self._optional_host_root_args(),
             *self.nvidia_tool_mount_args,
@@ -1179,6 +1188,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run podman build even when the image tag already exists (default skips build)",
     )
+    parser.add_argument(
+        "-e", "--env",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        dest="env_vars",
+        help="Pass an environment variable into the container (repeatable)",
+    )
     parser.add_argument("command", nargs=argparse.REMAINDER, help="Command to run (default: shell)")
     return parser.parse_args()
 
@@ -1283,6 +1300,7 @@ def main() -> int:
         mount_host_root=args.host_root,
         run_as_root=args.root,
         verbose=VERBOSE,
+        env_vars=args.env_vars,
     )
     launcher = PodmanLauncher(cfg)
     build_log = Path(args.nohup).expanduser() if args.nohup else None
