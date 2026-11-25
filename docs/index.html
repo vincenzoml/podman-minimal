@@ -300,6 +300,9 @@
       color: var(--muted);
       line-height: 1.6;
     }
+    .brand { display: flex; align-items: baseline; gap: 8px; }
+    .by { font-size: 13px; color: #8a8a8a; text-decoration: none; white-space: nowrap; }
+    .by:hover { color: var(--ink); }
     .foot a { color: var(--muted); }
     .foot a:hover { color: var(--ink); }
     @media (max-width: 760px) {
@@ -313,7 +316,7 @@
 <body>
   <main class="wrap">
     <header>
-      <h1>podman-minimal</h1>
+      <div class="brand"><h1>podman-minimal</h1><a class="by" href="https://make-become.github.io/">by make become</a></div>
       <nav class="nav" aria-label="Repository">
         <a class="btn-star" href="https://github.com/vincenzoml/podman-minimal">Star</a>
         <a class="github-ic" href="https://github.com/vincenzoml/podman-minimal" title="Source" aria-label="View source on GitHub">
@@ -384,6 +387,7 @@
     </section>
 
     <p class="foot"><span>© 2026 Vincenzo Ciancia</span><span>GPLv3+</span><a href="mailto:vincenzoml@gmail.com">vincenzoml@gmail.com</a></p>
+    <p class="foot"><span>podman-minimal is made by <a href="https://make-become.github.io/">make become</a>.</span></p>
   </main>
   <script>
     (() => {
